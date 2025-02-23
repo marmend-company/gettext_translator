@@ -55,4 +55,3 @@ jobs:
       - name: Run tests
         run: mix test --trace
         if: ${{ !matrix.coverage }}
-        
