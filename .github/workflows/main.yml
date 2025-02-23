@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  test:
+    name: Test (Elixir ${{ matrix.elixir }} | Erlang/OTP ${{ matrix.erlang }})
+    runs-on: "${{ matrix.os }}"
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            erlang: "27.0"
+            elixir: "1.18"
+            lint: true
+            coverage: true
+
+    env:
+      MIX_ENV: test
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install OTP and Elixir
+        uses: erlef/setup-beam@v1
+        with:
+          otp-version: ${{ matrix.erlang }}
+          elixir-version: ${{ matrix.elixir }}
+
+      - name: Install dependencies
+        run: mix deps.get --check-locked
+
+      - name: Check no unused dependencies
+        run: mix deps.unlock --check-unused
+        if: ${{ matrix.lint }}
+
+      - name: Check formatting
+        run: mix format --check-formatted
+        if: ${{ matrix.lint }}
+
+      - name: Compile with --warnings-as-errors
+        run: mix compile --warnings-as-errors
+        if: ${{ matrix.lint }}
+
+      - name: Run Credo
+        run: mix credo --strict
+        if: ${{ matrix.lint }}
+
+      - name: Run tests
+        run: mix test --trace
+        if: ${{ !matrix.coverage }}
