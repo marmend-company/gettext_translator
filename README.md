@@ -37,7 +37,7 @@ Configure GettextTranslator in your `config/config.exs` file. Below are examples
 ### Using Ollama AI
 
 ```elixir
-config :gettext_translator,
+config :gettext_translator, GettextTranslator,
   endpoint: LangChain.ChatModels.ChatOllamaAI,
   endpoint_model: "llama3.2:latest",
   endpoint_temperature: 0,
@@ -50,7 +50,7 @@ config :gettext_translator,
 ### Using OpenAI
 
 ```elixir
-config :gettext_translator,
+config :gettext_translator, GettextTranslator,
   endpoint: LangChain.ChatModels.ChatOpenAI,
   endpoint_model: "gpt-4",
   endpoint_temperature: 0,
