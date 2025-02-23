@@ -7,7 +7,7 @@ defmodule GettextTranslator.Util.Parser do
   @default_style "Casual, use simple language"
   @default_persona "You are a proffesional translator. Your goal is to translate the message to the target language and try to keep the same meaning and length of the output sentence as original one."
 
-  def parse_provider() do
+  def parse_provider do
     config = Application.fetch_env!(:gettext_translator, __MODULE__)
 
     %{

@@ -87,7 +87,7 @@ defmodule GettextTranslatorTest do
     end
   end
 
-  defp config_provider() do
+  defp config_provider do
     %{
       ignored_languages: ["en"],
       persona:
