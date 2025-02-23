@@ -4,7 +4,7 @@ defmodule GettextTranslator.MixProject do
   def project do
     [
       app: :gettext_translator,
-      version: "0.1.1",
+      version: "0.1.2",
       elixir: "~> 1.14",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
@@ -35,6 +35,7 @@ defmodule GettextTranslator.MixProject do
     [
       {:expo, "~> 1.1.0"},
       {:langchain, "0.3.1"},
+      {:ex_doc, ">= 0.0.0", only: [:dev], runtime: false},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", runtime: false}
     ]
