@@ -74,7 +74,8 @@ defmodule GettextTranslatorTest do
   end
 
   describe "translate/2" do
-    # @tag :skip
+    # skipped for Github Actions, as it require a local installation of ollama
+    @tag :skip
     test "Langchain based translator generates a translation" do
       {:ok, translation} =
         GettextTranslator.translate(

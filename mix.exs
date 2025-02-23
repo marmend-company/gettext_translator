@@ -5,17 +5,16 @@ defmodule GettextTranslator.MixProject do
     [
       app: :gettext_translator,
       version: "0.1.0",
-      elixir: "~> 1.18",
+      elixir: "~> 1.14",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       description: "Elixir Gettext add-on for translations with LLMs",
       package: package(),
-      source_url: "https://github.com/max-marmend/gettext-translator",
-      docs: [extras: ["README.md"], main: "readme"]
+      source_url: "https://github.com/marmend-company/gettext_translator",
+      docs: [extras: ["README.md", "CHANGELOG.md", "CONTRIBUTING.md"], main: "readme"]
     ]
   end
 
-  # Run "mix help compile.app" to learn about applications.
   def application do
     [
       extra_applications: [:logger]
@@ -26,13 +25,12 @@ defmodule GettextTranslator.MixProject do
     [
       name: :gettext_translator,
       licenses: ["Apache-2.0"],
-      links: %{"GitHub" => "https://github.com/max-marmend/gettext-translator"},
+      links: %{"GitHub" => "https://github.com/marmend-company/gettext_translator"},
       maintainers: ["Max Panov"],
-      files: ~w(lib mix.exs README.md LICENSE)
+      files: ~w(lib mix.exs README.md LICENSE CHANGELOG.md CONTRIBUTING.md)
     ]
   end
 
-  # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
       {:expo, "~> 1.1.0"},
