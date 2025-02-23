@@ -1,5 +1,7 @@
 # GettextTranslator
 
+[![CI](https://github.com/marmend-company/gettext_translator/actions/workflows/main.yml/badge.svg)](https://github.com/marmend-company/gettext_translator/actions/workflows/main.yml)
+
 **GettextTranslator** is a robust translation utility for Elixir projects that leverages advanced AI endpoints to provide high-quality translations. The library seamlessly integrates with Elixir's Gettext, enabling you to maintain the integrity of your application's messages while translating them accurately. It supports multiple AI providers, making it adaptable to your preferred translation service.
 
 **Changelog:** See [CHANGELOG.md](CHANGELOG.md) for detailed changes in each version.  
