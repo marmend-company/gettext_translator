@@ -12,6 +12,16 @@
 - **Customizable Configurations:** Define your own translation persona, style, and languages to ignore.
 - **CLI Integration:** Translate Gettext files directly from the command line.
 - **Seamless Gettext Integration:** Automatically translate files in your Gettext directory.
+- **Live Dashboard:** Monitor and manage translations through Phoenix LiveDashboard.
+
+#### Upcoming Dashboard Features
+In upcoming releases, the full dashboard UI will include:
+- Detailed view of all translations with filtering and pagination
+- Direct editing of translations in the UI
+- Approval workflow for machine translations
+- Saving changes back to PO files
+- Git integration for creating commits and PRs
+
 
 ## Installation
 
@@ -65,7 +75,7 @@ config :gettext_translator, GettextTranslator,
 
 ## Usage
 
-### Running the Translator
+### Running the Translator via CLI
 #### Translate Using the Default Gettext Folder
 To translate the default Gettext folder (`priv/gettext`), simply run:
 
@@ -78,6 +88,74 @@ If your Gettext files are located in a different directory, specify the path:
 
 ```sh
 mix gettext_translator.run path/to/your/gettext
+```
+
+### Phoenix LiveDashboard Integration (Preview)
+GettextTranslator provides a web UI for managing translations through Phoenix LiveDashboard.
+
+> **Note:** The full dashboard UI is under active development. The current version provides a basic view and API access to translations.
+
+#### Setup Dashboard Integration
+
+1. Add the required dependencies to your Phoenix application:
+
+```elixir
+def deps do
+  [
+    {:gettext_translator, "~> 0.1.4"},
+    {:phoenix_live_dashboard, "~> 0.8.0"},
+    {:phoenix_live_view, "~> 1.0.0"}
+  ]
+end
+```
+
+2. Add the GettextTranslator supervisor to your application:
+
+```elixir
+# lib/my_app/application.ex
+def start(_type, _args) do
+  children = [
+    # ... other children
+    GettextTranslator.Supervisor
+  ]
+  
+  opts = [strategy: :one_for_one, name: MyApp.Supervisor]
+  Supervisor.start_link(children, opts)
+end
+```
+
+3. Add the dashboard page to your Phoenix router:
+
+```elixir
+# lib/my_app_web/router.ex
+import Phoenix.LiveDashboard.Router
+
+scope "/" do
+  pipe_through [:browser, :admin_auth] # replace with your actual pipeline
+  
+  live_dashboard "/dashboard",
+    metrics: MyAppWeb.Telemetry,
+    additional_pages: GettextTranslator.Dashboard.page_config(gettext_path: "priv/gettext")
+end
+```
+
+#### Using the Translation API
+
+While the full UI is under development, you can use the Translation API directly in your application:
+
+```elixir
+# Start the store manually if not using GettextTranslator.Supervisor
+GettextTranslator.Dashboard.start_translation_store()
+
+# Load translations from your gettext path
+GettextTranslator.Dashboard.load_translations("priv/gettext")
+
+# Get all loaded translations
+translations = GettextTranslator.Dashboard.TranslationStore.list_translations()
+
+# Filter translations by criteria
+pending = GettextTranslator.Dashboard.TranslationStore.filter_translations(%{status: :pending})
+es_translations = GettextTranslator.Dashboard.TranslationStore.filter_translations(%{language_code: "es"})
 ```
 
 ### Advanced Examples
