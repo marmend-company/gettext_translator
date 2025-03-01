@@ -14,7 +14,7 @@ defmodule GettextTranslator.Dashboard do
     [
       {:gettext_translator, "~> 0.1.0"},
       {:phoenix_live_dashboard, "~> 0.8.0"},
-      {:phoenix_live_view, "~> 0.20.0"}
+      {:phoenix_live_view, "~> 1.0.0"}
     ]
   end
   ```
@@ -28,7 +28,7 @@ defmodule GettextTranslator.Dashboard do
       # ... other children
       GettextTranslator.Supervisor
     ]
-    
+
     opts = [strategy: :one_for_one, name: MyApp.Supervisor]
     Supervisor.start_link(children, opts)
   end
@@ -42,7 +42,7 @@ defmodule GettextTranslator.Dashboard do
 
   scope "/" do
     pipe_through [:browser, :admin_auth] # replace with your actual pipeline
-    
+
     live_dashboard "/dashboard",
       metrics: MyAppWeb.Telemetry,
       additional_pages: GettextTranslator.Dashboard.page_config(gettext_path: "priv/gettext")
