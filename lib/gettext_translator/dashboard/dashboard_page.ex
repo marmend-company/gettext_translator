@@ -8,7 +8,7 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
 
   use Phoenix.LiveDashboard.PageBuilder
   import Phoenix.Component
-  import GettextTranslator.Util.Helper
+  import Phoenix.HTML, only: [raw: 1]
 
   require Logger
   alias GettextTranslator.Dashboard.TranslationStore
@@ -66,11 +66,14 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
     # Ensure gettext_path is assigned
     assigns =
       assigns
-      |> Map.put(:translations_count, translations_count)
-      |> Map.put(:translations_loaded, translations_loaded)
-      |> Map.put(:translations, translations)
+      |> assign(translations_count: translations_count)
+      |> assign(translations_loaded: translations_loaded)
+      |> assign(translations: translations)
 
     ~H"""
+    <style>
+      <%= raw GettextTranslator.Dashboard.GettextDashboardCSS.styles() %>
+    </style>
     <div class="dashboard-container">
       <Header.render
         gettext_path={@gettext_path}
@@ -111,12 +114,11 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
       end)
 
     socket =
-      assign(socket,
-        viewing_translations: true,
-        viewing_language: language,
-        viewing_domain: domain,
-        filtered_translations: filtered_translations
-      )
+      socket
+      |> assign(viewing_translations: true)
+      |> assign(viewing_language: language)
+      |> assign(viewing_domain: domain)
+      |> assign(filtered_translations: filtered_translations)
 
     {:noreply, socket}
   end
@@ -133,7 +135,7 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
   end
 
   @impl true
-  def handle_event("edit_translation", %{"_id" => id}, socket) do
+  def handle_event("edit_translation", %{"id" => id}, socket) do
     {:noreply, assign(socket, editing_id: id)}
   end
 
@@ -165,6 +167,44 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
     # Update the translation in ETS
     case TranslationStore.update_translation(id, updates) do
       {:ok, updated} ->
+        # If there's a changelog entry, mark it as modified and update the translated text
+        updated =
+          if Map.has_key?(updated, :changelog_id) and not is_nil(updated.changelog_id) do
+            case :ets.lookup(:gettext_translator_changelog, updated.changelog_id) do
+              [{_, changelog_entry}] ->
+                # Create the translated string based on translation type
+                translated_text =
+                  if updated.type == :plural do
+                    plural_text = params["plural_translation"] || ""
+                    "#{translation} | #{plural_text}"
+                  else
+                    translation
+                  end
+
+                modified_entry =
+                  Map.merge(changelog_entry, %{
+                    translated: translated_text,
+                    status: "MODIFIED",
+                    modified: true
+                  })
+
+                :ets.insert(:gettext_translator_changelog, {updated.changelog_id, modified_entry})
+
+                # Update the in-memory representation
+                Map.put(updated, :changelog_status, "MODIFIED")
+
+              _ ->
+                # The changelog entry doesn't exist but translation was marked as having one
+                # Create a new changelog entry
+                {:ok, _} = TranslationStore.create_changelog_entry(updated, "MODIFIED")
+                Map.put(updated, :changelog_status, "MODIFIED")
+            end
+          else
+            # No changelog entry exists yet - create one
+            {:ok, _} = TranslationStore.create_changelog_entry(updated, "MODIFIED")
+            Map.put(updated, :changelog_status, "MODIFIED")
+          end
+
         # Update the filtered_translations in socket assigns
         filtered_translations =
           Enum.map(socket.assigns.filtered_translations, fn t ->
@@ -185,10 +225,39 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
   end
 
   @impl true
-  def handle_event("approve_translation", %{"_id" => id}, socket) do
+  def handle_event("approve_translation", %{"id" => id}, socket) do
     # Mark the translation as approved (change status to translated)
     case TranslationStore.update_translation(id, %{status: :translated}) do
       {:ok, updated} ->
+        # Update the changelog status if present
+        updated =
+          if Map.has_key?(updated, :changelog_id) and not is_nil(updated.changelog_id) do
+            # Update the changelog entry to APPROVED
+            case :ets.lookup(:gettext_translator_changelog, updated.changelog_id) do
+              [{_, changelog_entry}] ->
+                # Only mark as modified if status is changing
+                modified = changelog_entry.status != "APPROVED"
+
+                modified_entry =
+                  Map.merge(changelog_entry, %{
+                    status: "APPROVED",
+                    modified: modified
+                  })
+
+                :ets.insert(:gettext_translator_changelog, {updated.changelog_id, modified_entry})
+
+                # Also update the in-memory representation to show the updated status immediately
+                Map.put(updated, :changelog_status, "APPROVED")
+
+              _ ->
+                updated
+            end
+          else
+            # Create a new changelog entry with APPROVED status
+            {:ok, _} = TranslationStore.create_changelog_entry(updated, "APPROVED")
+            Map.put(updated, :changelog_status, "APPROVED")
+          end
+
         # Update the filtered_translations in socket assigns
         filtered_translations =
           Enum.map(socket.assigns.filtered_translations, fn t ->
@@ -208,6 +277,56 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
   end
 
   @impl true
+  def handle_event("save_to_files", _params, socket) do
+    # Get all translations from the store
+    translations = TranslationStore.list_translations()
+
+    # Get all modified translations (status = :modified or :translated)
+    modified_translations =
+      Enum.filter(translations, fn t ->
+        t.status == :modified || t.status == :translated
+      end)
+
+    # Save changelog entries first - this ensures any approved translations get saved
+    changelog_results = TranslationStore.save_changelog_to_files()
+
+    # Count successful changelog saves
+    changelog_successful =
+      Enum.count(changelog_results, fn
+        {:ok, _} -> true
+        _ -> false
+      end)
+
+    if Enum.empty?(modified_translations) && changelog_successful == 0 do
+      {:noreply, socket |> put_flash(:info, "No changes to save")}
+    else
+      # Group translations by file path
+      by_file = Enum.group_by(modified_translations, fn t -> t.file_path end)
+
+      # Process each file
+      po_results =
+        Enum.map(by_file, fn {file_path, file_translations} ->
+          save_translations_to_file(file_path, file_translations)
+        end)
+
+      # Count successful PO file saves
+      po_successful =
+        Enum.count(po_results, fn
+          {:ok, _} -> true
+          _ -> false
+        end)
+
+      successful = po_successful + changelog_successful
+
+      if successful > 0 do
+        {:noreply, socket |> put_flash(:info, "Saved changes to #{successful} files")}
+      else
+        {:noreply, socket |> put_flash(:error, "Failed to save changes")}
+      end
+    end
+  end
+
+  @impl true
   def handle_event("load_translations", params, socket) do
     # Get path from params or fallback to socket assigns or default
     gettext_path = params["path"] || socket.assigns.gettext_path || @default_gettext_path
@@ -221,13 +340,14 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
       result = TranslationStore.load_translations(gettext_path)
       translations = TranslationStore.list_translations()
 
-      translations_by_language =
-        Enum.map(translations, & &1.language_code) |> Enum.uniq() |> Enum.sort()
+      languages = Enum.map(translations, & &1.language_code) |> Enum.uniq() |> Enum.sort()
 
       case result do
         {:ok, count} ->
           {:noreply,
-           assign(socket, translations_loaded: true, translations: translations_by_language)
+           socket
+           |> assign(translations_loaded: true)
+           |> assign(translations: languages)
            |> put_flash(:info, "Loaded #{count} translations")}
 
         {:error, reason} ->
@@ -240,44 +360,6 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
 
         {:noreply,
          socket |> put_flash(:error, "Error loading translations: #{Exception.message(e)}")}
-    end
-  end
-
-  @impl true
-  def handle_event("save_to_files", _params, socket) do
-    # Get all translations from the store
-    translations = TranslationStore.list_translations()
-
-    # Get all modified translations (status = :modified or :translated)
-    modified_translations =
-      Enum.filter(translations, fn t ->
-        t.status == :modified || t.status == :translated
-      end)
-
-    if Enum.empty?(modified_translations) do
-      {:noreply, socket |> put_flash(:info, "No changes to save")}
-    else
-      # Group translations by file path
-      by_file = Enum.group_by(modified_translations, fn t -> t.file_path end)
-
-      # Process each file
-      results =
-        Enum.map(by_file, fn {file_path, file_translations} ->
-          save_translations_to_file(file_path, file_translations)
-        end)
-
-      # Count successful saves
-      successful =
-        Enum.count(results, fn
-          {:ok, _} -> true
-          _ -> false
-        end)
-
-      if successful > 0 do
-        {:noreply, socket |> put_flash(:info, "Saved changes to #{successful} files")}
-      else
-        {:noreply, socket |> put_flash(:error, "Failed to save changes")}
-      end
     end
   end
 
@@ -358,620 +440,5 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
           1 => [translation.plural_translation]
         }
     }
-  end
-end
-
-# Header Component
-defmodule GettextTranslator.Dashboard.Components.Header do
-  @moduledoc """
-  Header component for the Gettext Translator dashboard.
-  """
-  use Phoenix.Component
-
-  attr(:gettext_path, :string, required: true)
-  attr(:translations_count, :integer, required: true)
-  attr(:translations_loaded, :boolean, required: true)
-
-  def render(assigns) do
-    ~H"""
-    <section class="dashboard-card">
-      <h5 class="card-title">Gettext Translations</h5>
-
-      <div class="dashboard-stats-container">
-        <div class="dashboard-stat">
-          <span class="dashboard-stat-label">Gettext path:</span>
-          <span class="dashboard-stat-value"><%= @gettext_path %></span>
-        </div>
-        <div class="dashboard-stat">
-          <span class="dashboard-stat-label">Loaded translations:</span>
-          <span class="dashboard-stat-value"><%= @translations_count %></span>
-        </div>
-
-        <div class="dashboard-controls-container">
-          <form phx-submit="load_translations" phx-change="noop">
-            <input type="hidden" name="path" value={@gettext_path} />
-            <button type="submit" class="btn btn-primary">
-              <%= if @translations_loaded, do: "Reload", else: "Load" %> Translations
-            </button>
-          </form>
-
-          <%= if @translations_loaded do %>
-            <form phx-submit="save_to_files" phx-change="noop">
-              <button type="submit" class="btn btn-success">
-                Save Changes to Files
-              </button>
-            </form>
-          <% end %>
-        </div>
-      </div>
-    </section>
-    """
-  end
-end
-
-# Translation Stats Component
-defmodule GettextTranslator.Dashboard.Components.TranslationStats do
-  @moduledoc """
-  Component for displaying translation statistics.
-  """
-  use Phoenix.Component
-
-  attr(:translations, :list, required: true)
-
-  def render(assigns) do
-    ~H"""
-    <section id="translation-stats" class="dashboard-card mt-4">
-      <h5 class="card-title">Translation Stats</h5>
-      <div class="card-info">
-        <div class="dashboard-table-container">
-          <table class="table table-hover table-striped">
-            <thead>
-              <tr>
-                <th>Language</th>
-                <th>Domain</th>
-                <th>Count</th>
-                <th>Pending</th>
-                <th>Translated</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              <%= for language <- @translations |> Enum.map(& &1.language_code) |> Enum.uniq() |> Enum.sort() do %>
-                <%
-                  by_language = Enum.filter(@translations, & &1.language_code == language)
-                  domains = Enum.map(by_language, & &1.domain) |> Enum.uniq() |> Enum.sort()
-                %>
-                <%= for {domain, index} <- Enum.with_index(domains) do %>
-                  <%
-                    domain_translations = Enum.filter(by_language, & &1.domain == domain)
-                    count = length(domain_translations)
-                    pending = Enum.count(domain_translations, & &1.status == :pending)
-                    translated = Enum.count(domain_translations, & &1.status == :translated)
-                  %>
-                  <tr>
-                    <%= if index == 0 do %>
-                      <td rowspan={length(domains)} class="align-middle"><%= language %></td>
-                    <% end %>
-                    <td><%= domain %></td>
-                    <td><%= count %></td>
-                    <td class={pending_class(pending)}><%= pending %></td>
-                    <td class={translated_class(translated)}><%= translated %></td>
-                    <td>
-                      <button
-                        type="button"
-                        phx-click="show_translations"
-                        phx-value-language={language}
-                        phx-value-domain={domain}
-                        class="btn btn-link"
-                      >
-                        View
-                      </button>
-                    </td>
-                  </tr>
-                <% end %>
-              <% end %>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </section>
-    """
-  end
-
-  defp pending_class(0), do: ""
-  defp pending_class(_), do: "text-warning fw-semibold"
-
-  defp translated_class(0), do: ""
-  defp translated_class(_), do: "text-success fw-semibold"
-end
-
-# Translation Details Component
-defmodule GettextTranslator.Dashboard.Components.TranslationDetails do
-  @moduledoc """
-  Component for showing and editing translation details.
-  """
-  use Phoenix.Component
-  import GettextTranslator.Util.Helper, only: [empty_string?: 1]
-
-  attr(:viewing_language, :string, required: true)
-  attr(:viewing_domain, :string, required: true)
-  attr(:filtered_translations, :list, required: true)
-  attr(:editing_id, :string, default: nil)
-
-  def render(assigns) do
-    ~H"""
-    <section id="translation-details" class="dashboard-card mt-4">
-      <div class="card-title-container">
-        <h5 class="card-title"><%= @viewing_language %> / <%= @viewing_domain %> Translations</h5>
-        <button
-          type="button"
-          phx-click="hide_translations"
-          class="btn btn-link"
-        >
-          <i class="fa fa-times"></i> Close
-        </button>
-      </div>
-
-      <div class="card-info">
-        <div class="dashboard-table-container">
-          <table class="table table-hover table-striped">
-            <thead>
-              <tr>
-                <th>Message ID</th>
-                <th>Translation</th>
-                <th>Status</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              <%= for t <- @filtered_translations do %>
-                <tr>
-                  <td class="message-id-cell">
-                    <div class="message-id" title={t.message_id}>
-                      <%= t.message_id %>
-                    </div>
-
-                    <%= if t.type == :plural do %>
-                      <div class="plural-id" title={t.plural_id}>
-                        (plural) <%= t.plural_id %>
-                      </div>
-                    <% end %>
-                  </td>
-
-                  <%= if @editing_id == t.id do %>
-                    <td colspan="3" class="p-2">
-                      <.translation_edit_form translation={t} />
-                    </td>
-                  <% else %>
-                    <td class="translation-cell">
-                      <%= if empty_string?(t.translation) do %>
-                        <span class="text-danger">(empty)</span>
-                      <% else %>
-                        <div class="translation-content">
-                          <%= t.translation %>
-                        </div>
-                      <% end %>
-
-                      <%= if t.type == :plural do %>
-                        <div class="plural-translation">
-                          <%= if empty_string?(t.plural_translation) do %>
-                            <span class="text-danger">(empty)</span>
-                          <% else %>
-                            <div class="translation-content">
-                              <%= t.plural_translation %>
-                            </div>
-                          <% end %>
-                        </div>
-                      <% end %>
-                    </td>
-
-                    <td>
-                      <.status_badge status={t.status} />
-                    </td>
-
-                    <td class="action-cell">
-                      <div class="action-buttons">
-                        <button
-                          phx-click="edit_translation"
-                          phx-value-id={t.id}
-                          class="btn btn-link"
-                        >
-                          Edit
-                        </button>
-
-                        <%= if t.status == :pending do %>
-                          <button
-                            phx-click="approve_translation"
-                            phx-value-id={t.id}
-                            class="btn btn-link text-success"
-                          >
-                            Approve
-                          </button>
-                        <% end %>
-                      </div>
-                    </td>
-                  <% end %>
-                </tr>
-              <% end %>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </section>
-    """
-  end
-
-  attr(:translation, :map, required: true)
-
-  def translation_edit_form(assigns) do
-    ~H"""
-    <form phx-submit="save_translation" class="translation-form">
-      <input type="hidden" name="_id" value={@translation.id} />
-      <div class="form-group">
-        <label class="form-label">Translation</label>
-        <textarea
-          name="translation"
-          rows="2"
-          class="form-control"
-        ><%= @translation.translation || "" %></textarea>
-      </div>
-
-      <%= if @translation.type == :plural do %>
-        <div class="form-group mt-2">
-          <label class="form-label">Plural Translation</label>
-          <textarea
-            name="plural_translation"
-            rows="2"
-            class="form-control"
-          ><%= @translation.plural_translation || "" %></textarea>
-        </div>
-      <% end %>
-
-      <div class="form-actions">
-        <button
-          type="button"
-          phx-click="cancel_edit"
-          class="btn btn-secondary btn-sm"
-        >
-          Cancel
-        </button>
-
-        <button
-          type="submit"
-          class="btn btn-primary btn-sm"
-        >
-          Save
-        </button>
-      </div>
-    </form>
-    """
-  end
-
-  attr(:status, :atom, required: true)
-
-  def status_badge(assigns) do
-    badge_class =
-      case assigns.status do
-        :pending -> "badge bg-warning text-dark"
-        :translated -> "badge bg-success"
-        :modified -> "badge bg-info"
-      end
-
-    label =
-      case assigns.status do
-        :pending -> "Pending"
-        :translated -> "Translated"
-        :modified -> "Modified"
-      end
-
-    assigns = assign(assigns, :badge_class, badge_class)
-    assigns = assign(assigns, :label, label)
-
-    ~H"""
-    <span class={@badge_class}>
-      <%= @label %>
-    </span>
-    """
-  end
-end
-
-# CSS for Dashboard
-defmodule GettextTranslator.Dashboard.GettextDashboardCSS do
-  @moduledoc """
-  Provides CSS styles for the Gettext Translator Dashboard that match
-  Phoenix LiveDashboard's look and feel.
-  """
-
-  def styles do
-    """
-    /* Dashboard Container */
-    .dashboard-container {
-      padding: 1rem;
-    }
-
-    /* Card styles - matches LiveDashboard */
-    .dashboard-card {
-      background-color: #fff;
-      border-radius: 0.5rem;
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
-      margin-bottom: 1rem;
-      padding: 1rem;
-    }
-
-    .card-title {
-      color: #333;
-      font-size: 1.25rem;
-      font-weight: 600;
-      margin-bottom: 1rem;
-    }
-
-    .card-title-container {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 1rem;
-    }
-
-    /* Stats container */
-    .dashboard-stats-container {
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: space-between;
-      align-items: center;
-      gap: 1rem;
-    }
-
-    .dashboard-stat {
-      display: flex;
-      flex-direction: column;
-      margin-right: 2rem;
-    }
-
-    .dashboard-stat-label {
-      color: #666;
-      font-size: 0.875rem;
-    }
-
-    .dashboard-stat-value {
-      font-size: 1rem;
-      font-weight: 500;
-    }
-
-    .dashboard-controls-container {
-      display: flex;
-      gap: 0.5rem;
-      margin-left: auto;
-    }
-
-    /* Table styles */
-    .dashboard-table-container {
-      overflow-x: auto;
-    }
-
-    .table {
-      width: 100%;
-      margin-bottom: 1rem;
-      color: #212529;
-      border-collapse: collapse;
-    }
-
-    .table th,
-    .table td {
-      padding: 0.75rem;
-      vertical-align: top;
-      border-top: 1px solid #dee2e6;
-    }
-
-    .table thead th {
-      vertical-align: bottom;
-      border-bottom: 2px solid #dee2e6;
-      font-weight: 600;
-      text-align: left;
-    }
-
-    .table-striped tbody tr:nth-of-type(odd) {
-      background-color: rgba(0, 0, 0, 0.05);
-    }
-
-    .table-hover tbody tr:hover {
-      background-color: rgba(0, 0, 0, 0.075);
-    }
-
-    /* Message ID cell */
-    .message-id-cell {
-      font-family: monospace;
-      font-size: 0.875rem;
-      max-width: 20rem;
-    }
-
-    .message-id {
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      width: 100%;
-    }
-
-    .plural-id {
-      color: #6c757d;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      width: 100%;
-      margin-top: 0.25rem;
-    }
-
-    /* Translation cell */
-    .translation-cell {
-      font-family: monospace;
-      font-size: 0.875rem;
-    }
-
-    .translation-content {
-      word-break: break-all;
-    }
-
-    .plural-translation {
-      color: #6c757d;
-      margin-top: 0.5rem;
-    }
-
-    /* Buttons */
-    .btn {
-      display: inline-block;
-      font-weight: 400;
-      text-align: center;
-      vertical-align: middle;
-      user-select: none;
-      border: 1px solid transparent;
-      padding: 0.375rem 0.75rem;
-      font-size: 0.875rem;
-      line-height: 1.5;
-      border-radius: 0.25rem;
-      transition: color 0.15s, background-color 0.15s, border-color 0.15s;
-      cursor: pointer;
-    }
-
-    .btn-primary {
-      background-color: #3490dc;
-      color: white;
-    }
-
-    .btn-primary:hover {
-      background-color: #2779bd;
-    }
-
-    .btn-success {
-      background-color: #38c172;
-      color: white;
-    }
-
-    .btn-success:hover {
-      background-color: #2d995b;
-    }
-
-    .btn-secondary {
-      background-color: #6c757d;
-      color: white;
-    }
-
-    .btn-secondary:hover {
-      background-color: #5a6268;
-    }
-
-    .btn-link {
-      font-weight: 400;
-      color: #3490dc;
-      text-decoration: none;
-      background-color: transparent;
-      border: none;
-      padding: 0;
-    }
-
-    .btn-link:hover {
-      color: #1d68a7;
-      text-decoration: underline;
-    }
-
-    .btn-sm {
-      padding: 0.25rem 0.5rem;
-      font-size: 0.75rem;
-    }
-
-    /* Status badges */
-    .badge {
-      display: inline-block;
-      padding: 0.35em 0.65em;
-      font-size: 0.75em;
-      font-weight: 700;
-      line-height: 1;
-      text-align: center;
-      white-space: nowrap;
-      vertical-align: baseline;
-      border-radius: 0.25rem;
-    }
-
-    .bg-warning {
-      background-color: #ffc107;
-    }
-
-    .bg-success {
-      background-color: #28a745;
-      color: white;
-    }
-
-    .bg-info {
-      background-color: #17a2b8;
-      color: white;
-    }
-
-    .text-warning {
-      color: #ffc107;
-    }
-
-    .text-success {
-      color: #28a745;
-    }
-
-    .text-danger {
-      color: #dc3545;
-    }
-
-    .fw-semibold {
-      font-weight: 600;
-    }
-
-    /* Forms */
-    .translation-form {
-      display: flex;
-      flex-direction: column;
-      gap: 0.75rem;
-    }
-
-    .form-group {
-      margin-bottom: 0.5rem;
-    }
-
-    .form-label {
-      display: block;
-      margin-bottom: 0.25rem;
-      font-size: 0.875rem;
-      font-weight: 500;
-    }
-
-    .form-control {
-      display: block;
-      width: 100%;
-      padding: 0.375rem 0.75rem;
-      font-size: 0.875rem;
-      line-height: 1.5;
-      color: #495057;
-      background-color: #fff;
-      background-clip: padding-box;
-      border: 1px solid #ced4da;
-      border-radius: 0.25rem;
-      transition: border-color 0.15s;
-    }
-
-    .form-control:focus {
-      border-color: #80bdff;
-      outline: 0;
-      box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
-    }
-
-    .form-actions {
-      display: flex;
-      justify-content: flex-end;
-      gap: 0.5rem;
-      margin-top: 0.75rem;
-    }
-
-    .align-middle {
-      vertical-align: middle !important;
-    }
-
-    .mt-4 {
-      margin-top: 1.5rem;
-    }
-    """
   end
 end
