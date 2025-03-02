@@ -12,6 +12,8 @@ defmodule Mix.Tasks.GettextTranslator.Run do
       ```
   """
 
+  @shortdoc "Runs the gettext translator"
+
   @requirements ["app.start"]
   @preferred_cli_env :dev
 

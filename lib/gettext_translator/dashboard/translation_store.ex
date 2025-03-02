@@ -7,6 +7,7 @@ defmodule GettextTranslator.Dashboard.TranslationStore do
   use GenServer
   require Logger
   alias Expo.{Message, PO}
+  alias GettextTranslator.Util.Parser
   import GettextTranslator.Util.Helper
 
   @table_name :gettext_translator_entries
@@ -123,7 +124,7 @@ defmodule GettextTranslator.Dashboard.TranslationStore do
   @impl true
   def handle_call({:load_translations, gettext_path}, _from, state) do
     result =
-      case GettextTranslator.Util.Parser.scan(gettext_path) do
+      case Parser.scan(gettext_path) do
         {:ok, folders} ->
           translation_entries = process_translation_folders(folders)
           {:ok, length(translation_entries)}

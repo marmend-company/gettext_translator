@@ -15,8 +15,8 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
 
   alias GettextTranslator.Dashboard.Components.{
     Header,
-    TranslationStats,
-    TranslationDetails
+    TranslationDetails,
+    TranslationStats
   }
 
   @default_gettext_path "priv/gettext"

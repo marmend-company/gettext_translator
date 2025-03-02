@@ -1,4 +1,6 @@
 defmodule GettextTranslator.Dashboard do
+  alias GettextTranslator.Dashboard.TranslationStore
+
   @moduledoc """
   Phoenix LiveDashboard integration for GettextTranslator.
 
@@ -147,7 +149,7 @@ defmodule GettextTranslator.Dashboard do
   called directly if needed.
   """
   def start_translation_store do
-    GettextTranslator.Dashboard.TranslationStore.start_link()
+    TranslationStore.start_link()
   end
 
   @doc """
@@ -160,7 +162,7 @@ defmodule GettextTranslator.Dashboard do
   or `{:error, reason}` if loading failed.
   """
   def load_translations(gettext_path \\ "priv/gettext") do
-    GettextTranslator.Dashboard.TranslationStore.load_translations(gettext_path)
+    TranslationStore.load_translations(gettext_path)
   end
 
   @doc """
@@ -187,7 +189,7 @@ defmodule GettextTranslator.Dashboard do
     {:ok, count} = load_translations(gettext_path)
 
     # Get all translations and calculate some stats
-    translations = GettextTranslator.Dashboard.TranslationStore.list_translations()
+    translations = TranslationStore.list_translations()
     languages = translations |> Enum.map(& &1.language_code) |> Enum.uniq() |> Enum.sort()
     domains = translations |> Enum.map(& &1.domain) |> Enum.uniq() |> Enum.sort()
     pending = Enum.count(translations, &(&1.status == :pending))
