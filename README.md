@@ -12,16 +12,27 @@
 - **Customizable Configurations:** Define your own translation persona, style, and languages to ignore.
 - **CLI Integration:** Translate Gettext files directly from the command line.
 - **Seamless Gettext Integration:** Automatically translate files in your Gettext directory.
-- **Live Dashboard:** Monitor and manage translations through Phoenix LiveDashboard.
+- **Live Dashboard:** 
+- Monitor and manage translations through Phoenix LiveDashboard.
+- Detailed view of all translations with filtering and pagination
+- Direct editing of translations in the LiveView
+- Approval workflow for LLM based translations
+- Saving changes back to PO files
 
 #### Upcoming Dashboard Features
 In upcoming releases, the full dashboard UI will include:
-- Detailed view of all translations with filtering and pagination
-- Direct editing of translations in the UI
-- Approval workflow for machine translations
-- Saving changes back to PO files
 - Git integration for creating commits and PRs
 
+
+## Example
+
+#### List all translations in the dashboard:
+
+![all translations](examples/image.png)
+
+#### View translations in the dashboard:
+
+![view translation](examples/image-1.png)
 
 ## Installation
 
@@ -30,7 +41,7 @@ Add `gettext_translator` to your dependencies in your `mix.exs`:
 ```elixir
 def deps do
   [
-    {:gettext_translator, "~> 0.1.0"}
+    {:gettext_translator, "~> 0.2.0"}
   ]
 end
 ```
@@ -102,9 +113,9 @@ GettextTranslator provides a web UI for managing translations through Phoenix Li
 ```elixir
 def deps do
   [
-    {:gettext_translator, "~> 0.1.4"},
-    {:phoenix_live_dashboard, "~> 0.8.0"},
-    {:phoenix_live_view, "~> 1.0.0"}
+    {:gettext_translator, "~> 0.2.0"},
+    {:phoenix_live_dashboard, ">= 0.6.0"},
+    {:phoenix_live_view, ">= 0.17.0"}
   ]
 end
 ```

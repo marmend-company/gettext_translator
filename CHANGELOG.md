@@ -6,7 +6,7 @@ All notable changes to this project will be documented in this file.
 ### Added
 - Git integration for committing changes as PRs (optional)
 
-## [0.1.4] - 2025-03-01
+## [0.2.0] - 2025-03-08
 ### Added
 - Phoenix LiveDashboard integration for monitoring and managing translations
 - In-memory translation store using ETS tables

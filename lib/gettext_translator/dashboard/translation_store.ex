@@ -278,179 +278,6 @@ defmodule GettextTranslator.Dashboard.TranslationStore do
   end
 
   @doc """
-  Saves changelog entries to their corresponding files.
-  """
-  def save_changelog_to_files do
-    # Group changelog entries by source file
-    entries_by_file =
-      :ets.tab2list(@changelog_table)
-      |> Enum.map(fn {_, entry} -> entry end)
-      |> Enum.group_by(& &1.source_file)
-
-    if Enum.empty?(entries_by_file) do
-      []
-    else
-      # Ensure the directory exists
-      File.mkdir_p!("priv/translation_changelog")
-
-      # For each file, update the changelog file
-      Enum.map(entries_by_file, fn {file_path, entries} ->
-        # Extract language code and domain
-        language_code = List.first(entries).code
-        domain = extract_domain_from_path(file_path)
-
-        # Construct the changelog path
-        changelog_path = "priv/translation_changelog/#{language_code}_#{domain}_changelog.json"
-
-        Logger.debug("Saving changelog to: #{changelog_path}")
-
-        changelog =
-          case File.read(changelog_path) do
-            {:ok, content} ->
-              case Jason.decode(content) do
-                {:ok, changelog} ->
-                  changelog
-
-                {:error, reason} ->
-                  Logger.error("Failed to decode JSON for #{changelog_path}: #{inspect(reason)}")
-                  %{"history" => [], "language" => language_code, "source_file" => file_path}
-              end
-
-            {:error, :enoent} ->
-              # File doesn't exist - create new changelog
-              Logger.debug("Creating new changelog file at #{changelog_path}")
-              %{"history" => [], "language" => language_code, "source_file" => file_path}
-
-            {:error, reason} ->
-              Logger.error("Error reading changelog file #{changelog_path}: #{inspect(reason)}")
-              %{"history" => [], "language" => language_code, "source_file" => file_path}
-          end
-
-        # Get entries that need to be processed - both modified and approved
-        entries_to_process =
-          Enum.filter(entries, fn entry ->
-            entry.modified || entry.status == "APPROVED"
-          end)
-
-        if Enum.any?(entries_to_process) do
-          # Process existing history
-          history = Map.get(changelog, "history", [])
-
-          # Group entries by original text for easier lookup
-          entries_by_original =
-            Enum.group_by(
-              entries_to_process,
-              fn entry -> Enum.join(entry.original, "") end
-            )
-
-          # Check each history entry to see if we need to update any of its entries
-          updated_history =
-            Enum.map(history, fn history_entry ->
-              history_entries = Map.get(history_entry, "entries", [])
-
-              # Update entries in this history record
-              updated_entries =
-                Enum.map(history_entries, fn entry ->
-                  # Get the original text from the entry
-                  original_text =
-                    entry["original"]
-                    |> Enum.join("")
-
-                  # Check if we have an update for this entry
-                  case Map.get(entries_by_original, original_text) do
-                    [updated_entry | _] ->
-                      # Check if this is a NEW -> APPROVED transition
-                      if entry["status"] == "NEW" and updated_entry.status == "APPROVED" do
-                        # Update the entry status
-                        Logger.debug("Updating status for #{original_text} from NEW to APPROVED")
-
-                        # Mark as not modified since we're updating it here
-                        :ets.insert(
-                          @changelog_table,
-                          {updated_entry.id, Map.put(updated_entry, :modified, false)}
-                        )
-
-                        # Return updated entry with APPROVED status
-                        %{
-                          "code" => entry["code"],
-                          "original" => entry["original"],
-                          "status" => "APPROVED",
-                          "timestamp" => updated_entry.timestamp,
-                          "translated" => entry["translated"],
-                          "type" => entry["type"]
-                        }
-                      else
-                        # Not a NEW -> APPROVED transition
-                        entry
-                      end
-
-                    _ ->
-                      # No change to this entry
-                      entry
-                  end
-                end)
-
-              # Return the updated history entry
-              Map.put(history_entry, "entries", updated_entries)
-            end)
-
-          # Now check if we still have entries that need to be added
-          remaining_entries =
-            entries_by_original
-            |> Map.values()
-            |> List.flatten()
-            |> Enum.filter(fn entry -> entry.modified end)
-
-          final_history =
-            if Enum.any?(remaining_entries) do
-              # Create a new history entry for entries that weren't updates
-              new_history_entry = %{
-                "entries" =>
-                  Enum.map(remaining_entries, fn entry ->
-                    %{
-                      "code" => entry.code,
-                      "status" => entry.status,
-                      "timestamp" => entry.timestamp,
-                      "type" => entry.type,
-                      "original" => entry.original,
-                      "translated" => entry.translated
-                    }
-                  end),
-                "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
-              }
-
-              # Mark these entries as not modified
-              Enum.each(remaining_entries, fn entry ->
-                :ets.insert(@changelog_table, {entry.id, Map.put(entry, :modified, false)})
-              end)
-
-              # Add new history entry to the beginning
-              [new_history_entry | updated_history]
-            else
-              # No new entries to add
-              updated_history
-            end
-
-          # Create updated changelog
-          updated_changelog = Map.put(changelog, "history", final_history)
-
-          # Write updated changelog back to file
-          case File.write(changelog_path, Jason.encode!(updated_changelog, pretty: true)) do
-            :ok ->
-              {:ok, changelog_path}
-
-            {:error, reason} ->
-              Logger.error("Failed to write changelog file #{changelog_path}: #{inspect(reason)}")
-              {:error, reason}
-          end
-        else
-          {:ok, "No changes for #{changelog_path}"}
-        end
-      end)
-    end
-  end
-
-  @doc """
   Creates a changelog entry for a translation.
   """
   def create_changelog_entry(translation, status \\ "NEW") do
@@ -506,6 +333,222 @@ defmodule GettextTranslator.Dashboard.TranslationStore do
     :ets.insert(@table_name, {translation.id, updated_translation})
 
     {:ok, changelog_entry}
+  end
+
+  @doc """
+  Saves changelog entries to their corresponding files.
+  """
+  def save_changelog_to_files do
+    entries_by_file = get_entries_by_file()
+
+    if Enum.empty?(entries_by_file) do
+      []
+    else
+      # Ensure the directory exists
+      File.mkdir_p!("priv/translation_changelog")
+
+      # Process each file and its entries
+      Enum.map(entries_by_file, &process_file_entries/1)
+    end
+  end
+
+  defp get_entries_by_file do
+    :ets.tab2list(@changelog_table)
+    |> Enum.map(fn {_, entry} -> entry end)
+    |> Enum.group_by(& &1.source_file)
+  end
+
+  defp process_file_entries({file_path, entries}) do
+    # Extract language code and domain
+    language_code = List.first(entries).code
+    domain = extract_domain_from_path(file_path)
+
+    # Construct the changelog path
+    changelog_path = "priv/translation_changelog/#{language_code}_#{domain}_changelog.json"
+    Logger.debug("Saving changelog to: #{changelog_path}")
+
+    # Get or create the changelog
+    changelog = read_or_create_changelog(changelog_path, language_code, file_path)
+
+    # Get entries that need to be processed
+    entries_to_process = filter_entries_to_process(entries)
+
+    if Enum.any?(entries_to_process) do
+      # Process and save changelog
+      process_and_save_changelog(changelog_path, changelog, entries_to_process)
+    else
+      {:ok, "No changes for #{changelog_path}"}
+    end
+  end
+
+  defp read_or_create_changelog(path, language_code, file_path) do
+    case File.read(path) do
+      {:ok, content} ->
+        case Jason.decode(content) do
+          {:ok, changelog} ->
+            changelog
+
+          {:error, reason} ->
+            Logger.error("Failed to decode JSON for #{path}: #{inspect(reason)}")
+            create_new_changelog(language_code, file_path)
+        end
+
+      {:error, :enoent} ->
+        # File doesn't exist - create new changelog
+        Logger.debug("Creating new changelog file at #{path}")
+        create_new_changelog(language_code, file_path)
+
+      {:error, reason} ->
+        Logger.error("Error reading changelog file #{path}: #{inspect(reason)}")
+        create_new_changelog(language_code, file_path)
+    end
+  end
+
+  defp create_new_changelog(language_code, file_path) do
+    %{"history" => [], "language" => language_code, "source_file" => file_path}
+  end
+
+  defp filter_entries_to_process(entries) do
+    Enum.filter(entries, fn entry ->
+      entry.modified || entry.status == "APPROVED"
+    end)
+  end
+
+  defp process_and_save_changelog(path, changelog, entries_to_process) do
+    history = Map.get(changelog, "history", [])
+    entries_by_original = group_entries_by_original(entries_to_process)
+
+    # Update existing history entries
+    updated_history = update_existing_history(history, entries_by_original)
+
+    # Check for remaining entries that need new history entries
+    remaining_entries = get_remaining_entries(entries_by_original)
+
+    # Create final history with any new entries
+    final_history = add_new_history_entries(remaining_entries, updated_history)
+
+    # Save to file
+    save_changelog_to_file(path, Map.put(changelog, "history", final_history))
+  end
+
+  defp group_entries_by_original(entries) do
+    Enum.group_by(
+      entries,
+      fn entry -> Enum.join(entry.original, "") end
+    )
+  end
+
+  defp update_existing_history(history, entries_by_original) do
+    Enum.map(history, fn history_entry ->
+      history_entries = Map.get(history_entry, "entries", [])
+
+      # Update entries in this history record
+      updated_entries = update_history_entries(history_entries, entries_by_original)
+
+      # Return the updated history entry
+      Map.put(history_entry, "entries", updated_entries)
+    end)
+  end
+
+  defp update_history_entries(entries, entries_by_original) do
+    Enum.map(entries, fn entry ->
+      # Get the original text from the entry
+      original_text = entry["original"] |> Enum.join("")
+
+      # Check if we have an update for this entry
+      case Map.get(entries_by_original, original_text) do
+        [updated_entry | _] ->
+          update_entry_if_needed(entry, updated_entry, original_text)
+
+        _ ->
+          # No change to this entry
+          entry
+      end
+    end)
+  end
+
+  defp update_entry_if_needed(entry, updated_entry, original_text) do
+    # Check if this is a NEW -> APPROVED transition
+    if entry["status"] == "NEW" and updated_entry.status == "APPROVED" do
+      # Update the entry status
+      Logger.debug("Updating status for #{original_text} from NEW to APPROVED")
+
+      # Mark as not modified since we're updating it here
+      :ets.insert(
+        @changelog_table,
+        {updated_entry.id, Map.put(updated_entry, :modified, false)}
+      )
+
+      # Return updated entry with APPROVED status
+      %{
+        "code" => entry["code"],
+        "original" => entry["original"],
+        "status" => "APPROVED",
+        "timestamp" => updated_entry.timestamp,
+        "translated" => entry["translated"],
+        "type" => entry["type"]
+      }
+    else
+      # Not a NEW -> APPROVED transition
+      entry
+    end
+  end
+
+  defp get_remaining_entries(entries_by_original) do
+    entries_by_original
+    |> Map.values()
+    |> List.flatten()
+    |> Enum.filter(fn entry -> entry.modified end)
+  end
+
+  defp add_new_history_entries(remaining_entries, updated_history) do
+    if Enum.any?(remaining_entries) do
+      # Create a new history entry
+      new_history_entry = create_new_history_entry(remaining_entries)
+
+      # Mark these entries as not modified
+      mark_entries_as_not_modified(remaining_entries)
+
+      # Add new history entry to the beginning
+      [new_history_entry | updated_history]
+    else
+      # No new entries to add
+      updated_history
+    end
+  end
+
+  defp create_new_history_entry(entries) do
+    %{
+      "entries" =>
+        Enum.map(entries, fn entry ->
+          %{
+            "code" => entry.code,
+            "status" => entry.status,
+            "timestamp" => entry.timestamp,
+            "type" => entry.type,
+            "original" => entry.original,
+            "translated" => entry.translated
+          }
+        end),
+      "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+    }
+  end
+
+  defp mark_entries_as_not_modified(entries) do
+    Enum.each(entries, fn entry ->
+      :ets.insert(@changelog_table, {entry.id, Map.put(entry, :modified, false)})
+    end)
+  end
+
+  defp save_changelog_to_file(path, changelog) do
+    case File.write(path, Jason.encode!(changelog, pretty: true)) do
+      :ok ->
+        {:ok, path}
+
+      {:error, reason} ->
+        Logger.error("Failed to write changelog file #{path}: #{inspect(reason)}")
+        {:error, reason}
+    end
   end
 
   defp match_changelog_with_translations(changelog_entries) do

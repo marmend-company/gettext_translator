@@ -150,74 +150,29 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
         %{"_id" => id, "translation" => translation} = params,
         socket
       ) do
-    # Extract the id and translation text from params
-    updates = %{
-      translation: translation,
-      status: :modified
-    }
-
-    # Add plural_translation if it exists in params
+    # Build updates map with optional plural_translation
     updates =
-      if Map.has_key?(params, "plural_translation") do
-        Map.put(updates, :plural_translation, params["plural_translation"])
-      else
-        updates
-      end
+      %{
+        translation: translation,
+        status: :modified
+      }
+      |> maybe_add_plural_translation(params)
 
-    # Update the translation in ETS
     case TranslationStore.update_translation(id, updates) do
       {:ok, updated} ->
-        # If there's a changelog entry, mark it as modified and update the translated text
-        updated =
-          if Map.has_key?(updated, :changelog_id) and not is_nil(updated.changelog_id) do
-            case :ets.lookup(:gettext_translator_changelog, updated.changelog_id) do
-              [{_, changelog_entry}] ->
-                # Create the translated string based on translation type
-                translated_text =
-                  if updated.type == :plural do
-                    plural_text = params["plural_translation"] || ""
-                    "#{translation} | #{plural_text}"
-                  else
-                    translation
-                  end
+        updated = update_changelog(updated, params)
 
-                modified_entry =
-                  Map.merge(changelog_entry, %{
-                    translated: translated_text,
-                    status: "MODIFIED",
-                    modified: true
-                  })
-
-                :ets.insert(:gettext_translator_changelog, {updated.changelog_id, modified_entry})
-
-                # Update the in-memory representation
-                Map.put(updated, :changelog_status, "MODIFIED")
-
-              _ ->
-                # The changelog entry doesn't exist but translation was marked as having one
-                # Create a new changelog entry
-                {:ok, _} = TranslationStore.create_changelog_entry(updated, "MODIFIED")
-                Map.put(updated, :changelog_status, "MODIFIED")
-            end
-          else
-            # No changelog entry exists yet - create one
-            {:ok, _} = TranslationStore.create_changelog_entry(updated, "MODIFIED")
-            Map.put(updated, :changelog_status, "MODIFIED")
-          end
-
-        # Update the filtered_translations in socket assigns
+        # Update filtered_translations in socket assigns
         filtered_translations =
           Enum.map(socket.assigns.filtered_translations, fn t ->
             if t.id == id, do: updated, else: t
           end)
 
-        socket =
-          socket
-          |> assign(filtered_translations: filtered_translations)
-          |> assign(editing_id: nil)
-          |> put_flash(:info, "Translation updated")
-
-        {:noreply, socket}
+        {:noreply,
+         socket
+         |> assign(filtered_translations: filtered_translations)
+         |> assign(editing_id: nil)
+         |> put_flash(:info, "Translation updated")}
 
       {:error, reason} ->
         {:noreply, socket |> put_flash(:error, "Failed to update: #{inspect(reason)}")}
@@ -385,6 +340,64 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
         # Already started
         Logger.info("GettextTranslator.Dashboard.TranslationStore already running")
         :ok
+    end
+  end
+
+  defp maybe_add_plural_translation(updates, params) do
+    if Map.has_key?(params, "plural_translation") do
+      Map.put(updates, :plural_translation, params["plural_translation"])
+    else
+      updates
+    end
+  end
+
+  defp update_changelog(updated, params) do
+    if has_changelog_id?(updated) do
+      update_existing_changelog(updated, params)
+    else
+      create_new_changelog(updated)
+    end
+  end
+
+  defp has_changelog_id?(updated) do
+    Map.has_key?(updated, :changelog_id) and not is_nil(updated.changelog_id)
+  end
+
+  defp update_existing_changelog(updated, params) do
+    case :ets.lookup(:gettext_translator_changelog, updated.changelog_id) do
+      [{_, changelog_entry}] ->
+        translated_text = build_translated_text(updated, params)
+
+        modified_entry =
+          Map.merge(changelog_entry, %{
+            translated: translated_text,
+            status: "MODIFIED",
+            modified: true
+          })
+
+        :ets.insert(:gettext_translator_changelog, {updated.changelog_id, modified_entry})
+        Map.put(updated, :changelog_status, "MODIFIED")
+
+      _ ->
+        # Entry doesn't exist but translation was marked as having one
+        {:ok, _} = TranslationStore.create_changelog_entry(updated, "MODIFIED")
+        Map.put(updated, :changelog_status, "MODIFIED")
+    end
+  end
+
+  defp create_new_changelog(updated) do
+    {:ok, _} = TranslationStore.create_changelog_entry(updated, "MODIFIED")
+    Map.put(updated, :changelog_status, "MODIFIED")
+  end
+
+  defp build_translated_text(updated, params) do
+    case updated.type do
+      :plural ->
+        plural_text = params["plural_translation"] || ""
+        "#{params["translation"]} | #{plural_text}"
+
+      _ ->
+        params["translation"]
     end
   end
 
