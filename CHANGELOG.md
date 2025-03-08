@@ -4,7 +4,15 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 ### Added
-- Work in progress features and enhancements.
+- Git integration for committing changes as PRs (optional)
+
+## [0.2.0] - 2025-03-08
+### Added
+- Phoenix LiveDashboard integration for monitoring and managing translations
+- In-memory translation store using ETS tables
+- Web UI for viewing, editing, and approving translations
+- Filtering and pagination in dashboard
+- Improved documentation with dashboard setup guide
 
 ### Fixed
 - LLM integration for gettext files.

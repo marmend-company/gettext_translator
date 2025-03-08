@@ -20,9 +20,10 @@ defmodule GettextTranslator.Processor do
 
   defp translate_file(provider, code, file_path) do
     with {:ok, file} <- PO.parse_file(file_path),
-         {count, messages} <- process_messages(file, provider, code, file_path),
+         {count, messages, translations} <- process_messages(file, provider, code, file_path),
          updated_file = %{file | messages: messages},
-         :ok <- File.write(file_path, PO.compose(updated_file)) do
+         :ok <- File.write(file_path, PO.compose(updated_file)),
+         :ok <- append_to_changelog(code, file_path, translations) do
       {:ok, count}
     end
   end
@@ -41,12 +42,13 @@ defmodule GettextTranslator.Processor do
 
     case to_be_translated do
       0 ->
-        {0, file.messages}
+        {0, file.messages, []}
 
       _ ->
-        {to_be_translated,
-         translate_messages(empty_messages, provider, code, to_be_translated) ++
-           rest_messages}
+        {translated_messages, changelog_entries} =
+          translate_messages(empty_messages, provider, code, to_be_translated)
+
+        {to_be_translated, translated_messages ++ rest_messages, changelog_entries}
     end
   end
 
@@ -64,12 +66,15 @@ defmodule GettextTranslator.Processor do
         "Translation file `#{file_path}` has #{count} entries that need to be translated to `#{code}`"
       )
 
-  defp translate_messages(messages, provider, code, count),
-    do:
-      Enum.with_index(messages)
-      |> Enum.map(fn {message, index} ->
+  defp translate_messages(messages, provider, code, count) do
+    Enum.with_index(messages)
+    |> Enum.map_reduce([], fn {message, index}, acc ->
+      {translated_message, changelog_entry} =
         translate_message(provider, code, message, index + 1, count)
-      end)
+
+      {translated_message, [changelog_entry | acc]}
+    end)
+  end
 
   defp translate_message(
          provider,
@@ -81,8 +86,18 @@ defmodule GettextTranslator.Processor do
     Logger.info("#{index}/#{count} - translating message `#{val}` to `#{code}` ")
 
     {:ok, translated_value} = translate_text(provider, val, code)
+    translated_text = translated_value.last_message.content
 
-    %{message | msgstr: [translated_value.last_message.content]}
+    changelog_entry = %{
+      type: :singular,
+      original: val,
+      translated: translated_text,
+      code: code,
+      status: "NEW",
+      timestamp: DateTime.utc_now() |> DateTime.to_iso8601()
+    }
+
+    {%{message | msgstr: [translated_text]}, changelog_entry}
   end
 
   defp translate_message(
@@ -102,12 +117,29 @@ defmodule GettextTranslator.Processor do
     {:ok, translated_singular} = translate_text(provider, value_singular, code)
     {:ok, translated_plural} = translate_text(provider, value_plural, code)
 
-    %{
-      message
-      | msgstr: %{
-          0 => [translated_singular.last_message.content],
-          1 => [translated_plural.last_message.content]
-        }
+    singular_text = translated_singular.last_message.content
+    plural_text = translated_plural.last_message.content
+
+    changelog_entry = %{
+      type: :plural,
+      original_singular: value_singular,
+      original_plural: value_plural,
+      translated_singular: singular_text,
+      translated_plural: plural_text,
+      code: code,
+      status: "NEW",
+      timestamp: DateTime.utc_now() |> DateTime.to_iso8601()
+    }
+
+    {
+      %{
+        message
+        | msgstr: %{
+            0 => [singular_text],
+            1 => [plural_text]
+          }
+      },
+      changelog_entry
     }
   end
 
@@ -116,5 +148,44 @@ defmodule GettextTranslator.Processor do
       message: text,
       language_code: code
     })
+  end
+
+  defp append_to_changelog(_, _, []) do
+    :ok
+  end
+
+  defp append_to_changelog(code, file_path, translations) do
+    changelog_dir = Path.join("priv", "translation_changelog")
+    File.mkdir_p!(changelog_dir)
+
+    # Create a stable filename based on language and PO file
+    base_filename = "#{code}_#{Path.basename(file_path, ".po")}_changelog.json"
+    changelog_file = Path.join(changelog_dir, base_filename)
+
+    now = DateTime.utc_now()
+
+    new_entries = %{
+      "timestamp" => DateTime.to_iso8601(now),
+      "entries" => translations
+    }
+
+    existing_content =
+      if File.exists?(changelog_file) do
+        case File.read!(changelog_file) |> Jason.decode() do
+          {:ok, content} -> content
+          {:error, _} -> %{"language" => code, "source_file" => file_path, "history" => []}
+        end
+      else
+        %{"language" => code, "source_file" => file_path, "history" => []}
+      end
+
+    # Append new entries to history
+    updated_content =
+      Map.update(existing_content, "history", [new_entries], fn history ->
+        [new_entries | history]
+      end)
+
+    # Write the updated changelog
+    File.write!(changelog_file, Jason.encode!(updated_content, pretty: true))
   end
 end
