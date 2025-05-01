@@ -148,10 +148,19 @@ scope "/" do
   
   live_dashboard "/dashboard",
     metrics: MyAppWeb.Telemetry,
-    additional_pages: GettextTranslator.Dashboard.page_config(
-      gettext_path: Application.app_dir(:my_app, "priv/gettext"),
-      application: :my_app
-    )
+    additional_pages: 
+    [existing pages]
+    ++
+    [
+    gettext_translations: {
+      GettextTranslator.Dashboard.DashboardPage,
+      [
+        # Use relative path, will be resolved at runtime
+        gettext_path: "priv/gettext",
+        application: :my_app
+      ]
+    }
+  ]
 end
 ```
 
