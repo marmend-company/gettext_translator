@@ -9,6 +9,7 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
   use Phoenix.LiveDashboard.PageBuilder
   import Phoenix.Component
   import Phoenix.HTML, only: [raw: 1]
+  import GettextTranslator.Util.Helper
 
   require Logger
   alias GettextTranslator.Dashboard.TranslationStore
@@ -18,8 +19,6 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
     TranslationDetails,
     TranslationStats
   }
-
-  @config_table :gettext_translator_dashboard_config
 
   @impl true
   def init(opts) do
@@ -340,38 +339,6 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
         {:noreply, socket |> put_flash(:error, "Failed to save changes")}
       end
     end
-  end
-
-  defp store_config(key, value) when not is_nil(value) do
-    ensure_config_table()
-    :ets.insert(@config_table, {key, value})
-  end
-
-  defp store_config(_, _), do: :ok
-
-  defp get_config(key) do
-    ensure_config_table()
-
-    case :ets.lookup(@config_table, key) do
-      [{^key, value}] -> value
-      _ -> nil
-    end
-  end
-
-  defp ensure_config_table do
-    case :ets.info(@config_table) do
-      :undefined ->
-        # Table doesn't exist, create it
-        :ets.new(@config_table, [:set, :public, :named_table])
-        true
-
-      _ ->
-        # Table already exists
-        true
-    end
-  catch
-    # Handle errors (e.g., table already exists)
-    :error, _ -> true
   end
 
   # Helper function to ensure TranslationStore is started
