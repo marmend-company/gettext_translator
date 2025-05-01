@@ -169,7 +169,7 @@ defmodule GettextTranslator.Dashboard.TranslationStore do
     # First reset the tables
     :ets.delete_all_objects(@table_name)
     :ets.delete_all_objects(@changelog_table)
-
+    app = get_config(:application)
     # Ensure changelog directory exists
     PathHelper.ensure_changelog_dir()
 
@@ -180,7 +180,7 @@ defmodule GettextTranslator.Dashboard.TranslationStore do
           translation_entries = process_translation_folders(folders)
 
           # Then process changelog files
-          changelog_entries = load_changelog_files(folders)
+          changelog_entries = load_changelog_files(folders, app)
 
           # Match changelog entries with translations
           match_changelog_with_translations(changelog_entries)
@@ -257,14 +257,14 @@ defmodule GettextTranslator.Dashboard.TranslationStore do
     end
   end
 
-  defp load_changelog_files(folders) do
+  defp load_changelog_files(folders, app) do
     Logger.info("Loading changelog files")
 
     result =
       Enum.flat_map(folders, fn %{language_code: code, files: files} ->
         Enum.flat_map(files, fn file_path ->
           # Use PathHelper to get consistent changelog path
-          changelog_path = PathHelper.changelog_path_for_po(file_path)
+          changelog_path = PathHelper.changelog_path_for_po(file_path, app)
 
           Logger.debug("Checking for changelog at: #{changelog_path}")
           entries = process_changelog_file(changelog_path, file_path, code)

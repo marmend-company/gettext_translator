@@ -205,7 +205,7 @@ While the full UI is under development, you can use the Translation API directly
 GettextTranslator.Dashboard.start_translation_store()
 
 # Load translations from your gettext path
-GettextTranslator.Dashboard.load_translations(Application.app_dir(:my_app, "priv/gettext"))
+GettextTranslator.Dashboard.load_translations("priv/gettext")
 
 # Get all loaded translations
 translations = GettextTranslator.Dashboard.TranslationStore.list_translations()
