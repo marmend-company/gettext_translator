@@ -348,7 +348,7 @@ defmodule GettextTranslator.Dashboard.TranslationStore do
       app = get_application()
 
       # Ensure the directory exists using PathHelper
-      GettextTranslator.Util.PathHelper.ensure_changelog_dir(app)
+      PathHelper.ensure_changelog_dir(app)
 
       # Process each file and its entries, passing the app name
       Enum.map(entries_by_file, fn file_entries ->
@@ -391,7 +391,7 @@ defmodule GettextTranslator.Dashboard.TranslationStore do
 
     changelog_path =
       if app do
-        Path.join(GettextTranslator.Util.PathHelper.translation_changelog_dir(app), relative_path)
+        Path.join(PathHelper.translation_changelog_dir(app), relative_path)
       else
         Path.join("priv/translation_changelog", relative_path)
       end

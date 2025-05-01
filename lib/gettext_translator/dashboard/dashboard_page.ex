@@ -75,35 +75,34 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
 
   # Safely get configuration from ETS
   defp get_config(key) do
-    try do
-      case :ets.whereis(@config_table) do
-        :undefined ->
-          # Try to create table if it doesn't exist
-          :ets.new(@config_table, [:set, :public, :named_table])
-          nil
+    # First ensure the table exists
+    ensure_config_table()
 
-        _table_id ->
-          # Table exists, try to get the value
-          case :ets.lookup(@config_table, key) do
-            [{^key, value}] -> value
-            _ -> nil
-          end
-      end
-    rescue
-      # Handle any errors (e.g., table already exists)
+    # Then try to get the value
+    lookup_config(key)
+  end
+
+  defp ensure_config_table do
+    case :ets.info(@config_table) do
+      :undefined ->
+        # Table doesn't exist, create it and ignore any errors
+        :ets.new(@config_table, [:set, :public, :named_table])
+        :ok
+
       _ ->
-        # Try to read if table exists
-        case :ets.info(@config_table) do
-          :undefined ->
-            nil
-
-          _ ->
-            case :ets.lookup(@config_table, key) do
-              [{^key, value}] -> value
-              _ -> nil
-            end
-        end
+        :ok
     end
+  catch
+    :error, _ -> :ok
+  end
+
+  defp lookup_config(key) do
+    case :ets.lookup(@config_table, key) do
+      [{^key, value}] -> value
+      _ -> nil
+    end
+  catch
+    :error, _ -> nil
   end
 
   @impl true

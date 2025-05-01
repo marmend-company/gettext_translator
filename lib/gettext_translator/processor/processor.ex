@@ -8,6 +8,7 @@ defmodule GettextTranslator.Processor do
   alias Expo.Message
   alias Expo.PO
   alias GettextTranslator.Processor.LLM
+  alias GettextTranslator.Util.PathHelper
 
   def run(%{language_code: code, files: files}, provider) do
     Logger.info("#{code}/#{lc_messages()} - starting processing")
@@ -159,10 +160,10 @@ defmodule GettextTranslator.Processor do
     app = GettextTranslator.application()
 
     # Use the PathHelper to get the proper path and ensure the directory exists
-    GettextTranslator.Util.PathHelper.ensure_changelog_dir(app)
+    PathHelper.ensure_changelog_dir(app)
 
     # Use the PathHelper to get the changelog path
-    changelog_file = GettextTranslator.Util.PathHelper.changelog_path_for_po(file_path, app)
+    changelog_file = PathHelper.changelog_path_for_po(file_path, app)
 
     now = DateTime.utc_now()
 

@@ -141,6 +141,8 @@ end
 
 ```elixir
 # lib/my_app_web/router.ex
+import Phoenix.LiveDashboard.Router
+
 scope "/" do
   pipe_through [:browser, :admin_auth] # replace with your actual pipeline
   
