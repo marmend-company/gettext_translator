@@ -18,6 +18,8 @@
 - Direct editing of translations in the LiveView
 - Approval workflow for LLM based translations
 - Saving changes back to PO files
+- **Production Ready:** Works in both development and release environments with proper path handling.
+- **Pluralization Support:** Properly handles language-specific plural forms (including Ukrainian with three forms).
 
 #### Upcoming Dashboard Features
 In upcoming releases, the full dashboard UI will include:
@@ -41,7 +43,7 @@ Add `gettext_translator` to your dependencies in your `mix.exs`:
 ```elixir
 def deps do
   [
-    {:gettext_translator, "~> 0.2.0"}
+    {:gettext_translator, "~> 0.2.1"}
   ]
 end
 ```
@@ -146,8 +148,43 @@ scope "/" do
   
   live_dashboard "/dashboard",
     metrics: MyAppWeb.Telemetry,
-    additional_pages: GettextTranslator.Dashboard.page_config(gettext_path: "priv/gettext")
+    additional_pages: GettextTranslator.Dashboard.page_config(
+      gettext_path: Application.app_dir(:my_app, "priv/gettext"),
+      application: :my_app
+    )
 end
+```
+
+4. For Mix Releases we need to add the gettext_translator output files to the release assets:
+
+```elixir
+def project do
+    [
+      app: :my_app,
+      ...,
+      deps: deps(),
+      releases: [
+        my_app: [
+          ...,
+          # Explicitly include translation_changelog directory
+          steps: [:assemble, &copy_translation_files/1]
+        ]
+      ]
+    ]
+  end
+
+  defp copy_translation_files(release) do
+    File.mkdir_p!(Path.join([release.path, "lib", "my_app-#{release.version}", "priv", "translation_changelog"]))
+
+    source_dir = "priv/translation_changelog"
+    target_dir = Path.join([release.path, "lib", "my_app-#{release.version}", "priv", "translation_changelog"])
+
+    if File.exists?(source_dir) do
+      File.cp_r!(source_dir, target_dir)
+    end
+
+    release
+  end
 ```
 
 #### Using the Translation API
@@ -159,7 +196,7 @@ While the full UI is under development, you can use the Translation API directly
 GettextTranslator.Dashboard.start_translation_store()
 
 # Load translations from your gettext path
-GettextTranslator.Dashboard.load_translations("priv/gettext")
+GettextTranslator.Dashboard.load_translations(Application.app_dir(:my_app, "priv/gettext"))
 
 # Get all loaded translations
 translations = GettextTranslator.Dashboard.TranslationStore.list_translations()

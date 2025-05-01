@@ -344,12 +344,35 @@ defmodule GettextTranslator.Dashboard.TranslationStore do
     if Enum.empty?(entries_by_file) do
       []
     else
-      # Ensure the directory exists
-      File.mkdir_p!("priv/translation_changelog")
+      # Get the application name from configuration or ETS
+      app = get_application()
 
-      # Process each file and its entries
-      Enum.map(entries_by_file, &process_file_entries/1)
+      # Ensure the directory exists using PathHelper
+      PathHelper.ensure_changelog_dir(app)
+
+      # Process each file and its entries, passing the app name
+      Enum.map(entries_by_file, fn file_entries ->
+        process_file_entries(file_entries, app)
+      end)
     end
+  end
+
+  defp get_application do
+    # Try application environment first
+    # Then try ETS table if it exists
+    # Finally try the global configuration
+    Application.get_env(:gettext_translator, :dashboard_application) ||
+      case :ets.info(:gettext_translator_config) do
+        :undefined ->
+          nil
+
+        _ ->
+          case :ets.lookup(:gettext_translator_config, :application) do
+            [{:application, app}] -> app
+            _ -> nil
+          end
+      end ||
+      GettextTranslator.application()
   end
 
   defp get_entries_by_file do
@@ -358,16 +381,24 @@ defmodule GettextTranslator.Dashboard.TranslationStore do
     |> Enum.group_by(& &1.source_file)
   end
 
-  defp process_file_entries({file_path, entries}) do
+  defp process_file_entries({file_path, entries}, app) do
     # Extract language code and domain
     language_code = List.first(entries).code
     domain = extract_domain_from_path(file_path)
 
-    # Construct the changelog path
-    changelog_path = "priv/translation_changelog/#{language_code}_#{domain}_changelog.json"
+    # Construct the changelog path using PathHelper
+    relative_path = "#{language_code}_#{domain}_changelog.json"
+
+    changelog_path =
+      if app do
+        Path.join(PathHelper.translation_changelog_dir(app), relative_path)
+      else
+        Path.join("priv/translation_changelog", relative_path)
+      end
+
     Logger.debug("Saving changelog to: #{changelog_path}")
 
-    # Get or create the changelog
+    # Get or create the changelog - make sure this function handles absolute paths
     changelog = read_or_create_changelog(changelog_path, language_code, file_path)
 
     # Get entries that need to be processed

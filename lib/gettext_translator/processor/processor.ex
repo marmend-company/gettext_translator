@@ -8,6 +8,7 @@ defmodule GettextTranslator.Processor do
   alias Expo.Message
   alias Expo.PO
   alias GettextTranslator.Processor.LLM
+  alias GettextTranslator.Util.PathHelper
 
   def run(%{language_code: code, files: files}, provider) do
     Logger.info("#{code}/#{lc_messages()} - starting processing")
@@ -155,12 +156,14 @@ defmodule GettextTranslator.Processor do
   end
 
   defp append_to_changelog(code, file_path, translations) do
-    changelog_dir = Path.join("priv", "translation_changelog")
-    File.mkdir_p!(changelog_dir)
+    # Get the application that is using the processor
+    app = GettextTranslator.application()
 
-    # Create a stable filename based on language and PO file
-    base_filename = "#{code}_#{Path.basename(file_path, ".po")}_changelog.json"
-    changelog_file = Path.join(changelog_dir, base_filename)
+    # Use the PathHelper to get the proper path and ensure the directory exists
+    PathHelper.ensure_changelog_dir(app)
+
+    # Use the PathHelper to get the changelog path
+    changelog_file = PathHelper.changelog_path_for_po(file_path, app)
 
     now = DateTime.utc_now()
 

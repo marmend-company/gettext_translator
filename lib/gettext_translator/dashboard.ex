@@ -75,23 +75,32 @@ defmodule GettextTranslator.Dashboard do
   ## Options
 
   * `:gettext_path` - Path to the gettext directory (default: "priv/gettext")
+  * `:application` - The OTP application name used for resolving absolute paths in releases
 
   ## Example
 
   ```elixir
   live_dashboard "/dashboard",
-    metrics: MyAppWeb.Telemetry,
-    additional_pages: GettextTranslator.Dashboard.page_config(gettext_path: "priv/gettext")
+  metrics: MyAppWeb.Telemetry,
+  additional_pages: GettextTranslator.Dashboard.page_config(
+    gettext_path: "priv/gettext",
+    application: :my_app
+  )
   ```
   """
   def page_config(opts \\ []) do
     if ensure_dashboard_dependencies_loaded?() do
-      gettext_path = Keyword.get(opts, :gettext_path, "priv/gettext")
+      gettext_path = Keyword.get(opts, :gettext_path)
+
+      # Make sure path is provided
+      unless gettext_path do
+        raise ArgumentError, "Missing required option :gettext_path"
+      end
 
       [
         gettext_translations: {
           GettextTranslator.Dashboard.DashboardPage,
-          [gettext_path: gettext_path]
+          [gettext_path: opts[:gettext_path], application: opts[:application]]
         }
       ]
     else
@@ -109,14 +118,18 @@ defmodule GettextTranslator.Dashboard do
   ## Options
 
   * `:gettext_path` - Path to the gettext directory (default: "priv/gettext")
+  * `:application` - The OTP application name used for resolving absolute paths in releases
 
   ## Example
 
   ```elixir
   # When manually constructing the dashboard pages
   additional_pages = [
-    my_custom_page: {MyCustomPage, []},
-    gettext_translations: GettextTranslator.Dashboard.page()
+  my_custom_page: {MyCustomPage, []},
+  gettext_translations: GettextTranslator.Dashboard.page(
+    gettext_path: "priv/gettext",
+    application: :my_app
+  )
   ]
   ```
   """
@@ -157,6 +170,9 @@ defmodule GettextTranslator.Dashboard do
 
   This must be called after the translation store is started to load the
   translations into memory.
+
+  For release environments, use an absolute path:
+  `Application.app_dir(:my_app, "priv/gettext")`
 
   Returns `{:ok, count}` where count is the number of translations loaded,
   or `{:error, reason}` if loading failed.
