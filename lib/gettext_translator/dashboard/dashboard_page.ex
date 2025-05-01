@@ -23,86 +23,34 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
 
   @impl true
   def init(opts) do
+    Logger.info("DashboardPage init received opts: #{inspect(opts)}")
+
+    # Store the raw configs without resolving paths
     gettext_path = Keyword.get(opts, :gettext_path)
     application = Keyword.get(opts, :application)
 
-    # Make sure we have a path
-    unless gettext_path do
-      raise ArgumentError, "Missing required option :gettext_path in #{inspect(opts)}"
-    end
+    # Ensure the table exists
+    ensure_config_table()
 
-    # Store configuration in ETS - safely create or update
-    store_config(gettext_path, application)
+    # Store raw configs
+    store_config(:raw_gettext_path, gettext_path)
+    store_config(:application, application)
 
     {:ok, %{}}
   end
 
   @impl true
   def mount(_params, _session, socket) do
-    # Get path from ETS
-    gettext_path = get_config(:gettext_path)
-
-    if gettext_path do
-      # Ensure the TranslationStore is started
-      case ensure_translation_store_started() do
-        :ok ->
-          {:ok, assign(socket, gettext_path: gettext_path, translations: [])}
-
-        {:error, reason} ->
-          Logger.error("Failed to start TranslationStore: #{inspect(reason)}")
-          {:ok, assign(socket, gettext_path: gettext_path, translations: [])}
-      end
-    else
-      {:ok,
-       assign(socket, error: "Configuration error: gettext_path not provided", translations: [])}
-    end
-  end
-
-  # Safely create or update ETS table with configuration
-  defp store_config(gettext_path, application) do
-    # Create table if it doesn't exist
-    if :ets.whereis(@config_table) == :undefined do
-      :ets.new(@config_table, [:set, :public, :named_table])
-    end
-
-    # Store configuration
-    :ets.insert(@config_table, {:gettext_path, gettext_path})
-
-    if application do
-      :ets.insert(@config_table, {:application, application})
-    end
-  end
-
-  # Safely get configuration from ETS
-  defp get_config(key) do
-    # First ensure the table exists
-    ensure_config_table()
-
-    # Then try to get the value
-    lookup_config(key)
-  end
-
-  defp ensure_config_table do
-    case :ets.info(@config_table) do
-      :undefined ->
-        # Table doesn't exist, create it and ignore any errors
-        :ets.new(@config_table, [:set, :public, :named_table])
-        :ok
-
-      _ ->
-        :ok
-    end
-  catch
-    :error, _ -> :ok
-  end
-
-  defp lookup_config(key) do
-    case :ets.lookup(@config_table, key) do
-      [{^key, value}] -> value
-      _ -> nil
-    end
-  catch
-    :error, _ -> nil
+    # Just assign socket without loading translations
+    {:ok,
+     assign(socket,
+       translations: [],
+       translations_loaded: false,
+       translations_count: 0,
+       gettext_path: nil,
+       translations_count: 0,
+       translations_loaded0: false
+     )}
   end
 
   @impl true
@@ -298,44 +246,49 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
   end
 
   @impl true
-  def handle_event("load_translations", params, socket) do
-    # Use the path from socket assigns - no fallback to default
-    path = params["path"] || socket.assigns.gettext_path
+  def handle_event("load_translations", _params, socket) do
+    # Resolve the path at runtime when button is clicked
+    app = get_config(:application)
+    raw_path = get_config(:raw_gettext_path)
 
-    # Make sure we have a path
-    unless path do
-      {:noreply, socket |> put_flash(:error, "No gettext path provided")}
-    end
+    gettext_path =
+      if app && raw_path do
+        # Resolve path at runtime
+        resolved_path = Application.app_dir(app, raw_path)
 
-    # Log for debugging
-    Logger.debug("Loading translations from path: #{inspect(path)}")
+        # Store the resolved path for future use
+        store_config(:gettext_path, resolved_path)
 
-    # Clear the table before loading to avoid duplicates
-    try do
-      # Load translations
-      result = TranslationStore.load_translations(path)
-      translations = TranslationStore.list_translations()
+        Logger.info("Resolved gettext path: #{resolved_path}")
+        resolved_path
+      else
+        get_config(:gettext_path)
+      end
 
-      languages = Enum.map(translations, & &1.language_code) |> Enum.uniq() |> Enum.sort()
+    if gettext_path do
+      # Ensure the TranslationStore is started
+      case ensure_translation_store_started() do
+        :ok ->
+          # Load translations
+          {:ok, count} = TranslationStore.load_translations(gettext_path)
 
-      case result do
-        {:ok, count} ->
           {:noreply,
-           socket
-           |> assign(translations_loaded: true)
-           |> assign(translations: languages)
-           |> put_flash(:info, "Loaded #{count} translations")}
+           assign(socket,
+             gettext_path: gettext_path,
+             translations_loaded: count > 0,
+             translations_count: count
+           )}
 
         {:error, reason} ->
-          {:noreply,
-           socket |> put_flash(:error, "Failed to load translations: #{inspect(reason)}")}
-      end
-    rescue
-      e ->
-        Logger.error("Error loading translations: #{inspect(e)}")
+          Logger.error("Failed to start TranslationStore: #{inspect(reason)}")
 
-        {:noreply,
-         socket |> put_flash(:error, "Error loading translations: #{Exception.message(e)}")}
+          {:noreply,
+           socket |> put_flash(:error, "Failed to start translation store: #{inspect(reason)}")}
+      end
+    else
+      # Provide a helpful error message
+      Logger.error("Missing gettext_path in load_translations event")
+      {:noreply, socket |> put_flash(:error, "Configuration error: gettext_path not provided")}
     end
   end
 
@@ -387,6 +340,38 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
         {:noreply, socket |> put_flash(:error, "Failed to save changes")}
       end
     end
+  end
+
+  defp store_config(key, value) when not is_nil(value) do
+    ensure_config_table()
+    :ets.insert(@config_table, {key, value})
+  end
+
+  defp store_config(_, _), do: :ok
+
+  defp get_config(key) do
+    ensure_config_table()
+
+    case :ets.lookup(@config_table, key) do
+      [{^key, value}] -> value
+      _ -> nil
+    end
+  end
+
+  defp ensure_config_table do
+    case :ets.info(@config_table) do
+      :undefined ->
+        # Table doesn't exist, create it
+        :ets.new(@config_table, [:set, :public, :named_table])
+        true
+
+      _ ->
+        # Table already exists
+        true
+    end
+  catch
+    # Handle errors (e.g., table already exists)
+    :error, _ -> true
   end
 
   # Helper function to ensure TranslationStore is started

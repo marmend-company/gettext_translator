@@ -6,6 +6,12 @@ All notable changes to this project will be documented in this file.
 ### Added
 - Git integration for committing changes as PRs (optional)
 
+## [0.2.2] - 2025-05-01
+- Update regex pattern in `extract_language_code/1` to correctly match LC_MESSAGES folder structure
+- Extract common path patterns to module attributes to reduce repetition
+- Add private `app_path/2` helper to standardize path generation
+- Ensure consistent path handling across all helper functions
+
 ## [0.2.1] - 2025-05-01
 
 ### Fixed
