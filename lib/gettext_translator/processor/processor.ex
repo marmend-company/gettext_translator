@@ -155,12 +155,14 @@ defmodule GettextTranslator.Processor do
   end
 
   defp append_to_changelog(code, file_path, translations) do
-    changelog_dir = Path.join("priv", "translation_changelog")
-    File.mkdir_p!(changelog_dir)
+    # Get the application that is using the processor
+    app = GettextTranslator.application()
 
-    # Create a stable filename based on language and PO file
-    base_filename = "#{code}_#{Path.basename(file_path, ".po")}_changelog.json"
-    changelog_file = Path.join(changelog_dir, base_filename)
+    # Use the PathHelper to get the proper path and ensure the directory exists
+    GettextTranslator.Util.PathHelper.ensure_changelog_dir(app)
+
+    # Use the PathHelper to get the changelog path
+    changelog_file = GettextTranslator.Util.PathHelper.changelog_path_for_po(file_path, app)
 
     now = DateTime.utc_now()
 

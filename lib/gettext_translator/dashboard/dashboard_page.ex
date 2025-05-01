@@ -19,36 +19,90 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
     TranslationStats
   }
 
-  @default_gettext_path "priv/gettext"
+  @config_table :gettext_translator_dashboard_config
 
   @impl true
   def init(opts) do
-    gettext_path = opts[:gettext_path] || @default_gettext_path
+    gettext_path = Keyword.get(opts, :gettext_path)
+    application = Keyword.get(opts, :application)
 
-    {:ok,
-     %{
-       gettext_path: gettext_path,
-       translations_loaded: false
-     }, application: opts[:application]}
+    # Make sure we have a path
+    unless gettext_path do
+      raise ArgumentError, "Missing required option :gettext_path in #{inspect(opts)}"
+    end
+
+    # Store configuration in ETS - safely create or update
+    store_config(gettext_path, application)
+
+    {:ok, %{}}
   end
 
   @impl true
   def mount(_params, _session, socket) do
-    # Get the gettext_path - fallback to default if not available
-    gettext_path =
-      case socket.assigns do
-        %{page: %{gettext_path: path}} when is_binary(path) -> path
-        _ -> @default_gettext_path
+    # Get path from ETS
+    gettext_path = get_config(:gettext_path)
+
+    if gettext_path do
+      # Ensure the TranslationStore is started
+      case ensure_translation_store_started() do
+        :ok ->
+          {:ok, assign(socket, gettext_path: gettext_path, translations: [])}
+
+        {:error, reason} ->
+          Logger.error("Failed to start TranslationStore: #{inspect(reason)}")
+          {:ok, assign(socket, gettext_path: gettext_path, translations: [])}
       end
+    else
+      {:ok,
+       assign(socket, error: "Configuration error: gettext_path not provided", translations: [])}
+    end
+  end
 
-    # Ensure the TranslationStore is started
-    case ensure_translation_store_started() do
-      :ok ->
-        {:ok, assign(socket, gettext_path: gettext_path, translations: [])}
+  # Safely create or update ETS table with configuration
+  defp store_config(gettext_path, application) do
+    # Create table if it doesn't exist
+    if :ets.whereis(@config_table) == :undefined do
+      :ets.new(@config_table, [:set, :public, :named_table])
+    end
 
-      {:error, reason} ->
-        Logger.error("Failed to start TranslationStore: #{inspect(reason)}")
-        {:ok, assign(socket, gettext_path: gettext_path, translations: [])}
+    # Store configuration
+    :ets.insert(@config_table, {:gettext_path, gettext_path})
+
+    if application do
+      :ets.insert(@config_table, {:application, application})
+    end
+  end
+
+  # Safely get configuration from ETS
+  defp get_config(key) do
+    try do
+      case :ets.whereis(@config_table) do
+        :undefined ->
+          # Try to create table if it doesn't exist
+          :ets.new(@config_table, [:set, :public, :named_table])
+          nil
+
+        _table_id ->
+          # Table exists, try to get the value
+          case :ets.lookup(@config_table, key) do
+            [{^key, value}] -> value
+            _ -> nil
+          end
+      end
+    rescue
+      # Handle any errors (e.g., table already exists)
+      _ ->
+        # Try to read if table exists
+        case :ets.info(@config_table) do
+          :undefined ->
+            nil
+
+          _ ->
+            case :ets.lookup(@config_table, key) do
+              [{^key, value}] -> value
+              _ -> nil
+            end
+        end
     end
   end
 
@@ -59,42 +113,55 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
 
   @impl true
   def render(assigns) do
-    translations = TranslationStore.list_translations()
-    translations_count = length(translations)
-    translations_loaded = translations_count > 0
+    # Check if we have a gettext_path
+    if Map.has_key?(assigns, :error) do
+      assigns = assign(assigns, :translations, [])
 
-    # Ensure gettext_path is assigned
-    assigns =
-      assigns
-      |> assign(translations_count: translations_count)
-      |> assign(translations_loaded: translations_loaded)
-      |> assign(translations: translations)
+      ~H"""
+      <div class="dashboard-container">
+        <div class="alert alert-danger">
+          <%= @error %>
+        </div>
+      </div>
+      """
+    else
+      translations = TranslationStore.list_translations()
+      translations_count = length(translations)
+      translations_loaded = translations_count > 0
 
-    ~H"""
-    <style>
-      <%= raw GettextTranslator.Dashboard.GettextDashboardCSS.styles() %>
-    </style>
-    <div class="dashboard-container">
-      <Header.render
-        gettext_path={@gettext_path}
-        translations_count={@translations_count}
-        translations_loaded={@translations_loaded}
-      />
+      # Ensure gettext_path is assigned
+      assigns =
+        assigns
+        |> assign(translations_count: translations_count)
+        |> assign(translations_loaded: translations_loaded)
+        |> assign(translations: translations)
 
-      <%= if @translations_loaded do %>
-        <TranslationStats.render translations={@translations} />
+      ~H"""
+      <style>
+        <%= raw GettextTranslator.Dashboard.GettextDashboardCSS.styles() %>
+      </style>
+      <div class="dashboard-container">
+        <Header.render
+          gettext_path={@gettext_path}
+          translations_count={@translations_count}
+          translations_loaded={@translations_loaded}
+        />
 
-        <%= if assigns[:viewing_translations] do %>
-          <TranslationDetails.render
-            viewing_language={@viewing_language}
-            viewing_domain={@viewing_domain}
-            filtered_translations={@filtered_translations}
-            editing_id={assigns[:editing_id]}
-          />
+        <%= if @translations_loaded do %>
+          <TranslationStats.render translations={@translations} />
+
+          <%= if assigns[:viewing_translations] do %>
+            <TranslationDetails.render
+              viewing_language={@viewing_language}
+              viewing_domain={@viewing_domain}
+              filtered_translations={@filtered_translations}
+              editing_id={assigns[:editing_id]}
+            />
+          <% end %>
         <% end %>
-      <% end %>
-    </div>
-    """
+      </div>
+      """
+    end
   end
 
   # Needed for phx-change="noop"
@@ -232,6 +299,48 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
   end
 
   @impl true
+  def handle_event("load_translations", params, socket) do
+    # Use the path from socket assigns - no fallback to default
+    path = params["path"] || socket.assigns.gettext_path
+
+    # Make sure we have a path
+    unless path do
+      {:noreply, socket |> put_flash(:error, "No gettext path provided")}
+    end
+
+    # Log for debugging
+    Logger.debug("Loading translations from path: #{inspect(path)}")
+
+    # Clear the table before loading to avoid duplicates
+    try do
+      # Load translations
+      result = TranslationStore.load_translations(path)
+      translations = TranslationStore.list_translations()
+
+      languages = Enum.map(translations, & &1.language_code) |> Enum.uniq() |> Enum.sort()
+
+      case result do
+        {:ok, count} ->
+          {:noreply,
+           socket
+           |> assign(translations_loaded: true)
+           |> assign(translations: languages)
+           |> put_flash(:info, "Loaded #{count} translations")}
+
+        {:error, reason} ->
+          {:noreply,
+           socket |> put_flash(:error, "Failed to load translations: #{inspect(reason)}")}
+      end
+    rescue
+      e ->
+        Logger.error("Error loading translations: #{inspect(e)}")
+
+        {:noreply,
+         socket |> put_flash(:error, "Error loading translations: #{Exception.message(e)}")}
+    end
+  end
+
+  @impl true
   def handle_event("save_to_files", _params, socket) do
     # Get all translations from the store
     translations = TranslationStore.list_translations()
@@ -278,43 +387,6 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
       else
         {:noreply, socket |> put_flash(:error, "Failed to save changes")}
       end
-    end
-  end
-
-  @impl true
-  def handle_event("load_translations", params, socket) do
-    # Get path from params or fallback to socket assigns or default
-    gettext_path = params["path"] || socket.assigns.gettext_path || @default_gettext_path
-
-    # Log for debugging
-    Logger.debug("Loading translations from path: #{inspect(gettext_path)}")
-
-    # Clear the table before loading to avoid duplicates
-    try do
-      # Load translations
-      result = TranslationStore.load_translations(gettext_path)
-      translations = TranslationStore.list_translations()
-
-      languages = Enum.map(translations, & &1.language_code) |> Enum.uniq() |> Enum.sort()
-
-      case result do
-        {:ok, count} ->
-          {:noreply,
-           socket
-           |> assign(translations_loaded: true)
-           |> assign(translations: languages)
-           |> put_flash(:info, "Loaded #{count} translations")}
-
-        {:error, reason} ->
-          {:noreply,
-           socket |> put_flash(:error, "Failed to load translations: #{inspect(reason)}")}
-      end
-    rescue
-      e ->
-        Logger.error("Error loading translations: #{inspect(e)}")
-
-        {:noreply,
-         socket |> put_flash(:error, "Error loading translations: #{Exception.message(e)}")}
     end
   end
 
@@ -446,12 +518,33 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
   end
 
   defp update_po_message(%Expo.Message.Plural{} = msg, translation) do
-    %{
-      msg
-      | msgstr: %{
-          0 => [translation.translation],
-          1 => [translation.plural_translation]
-        }
+    # Base msgstr with the first two forms
+    initial_msgstr = %{
+      0 => [translation.translation],
+      1 => [translation.plural_translation]
     }
+
+    # Add third form for languages that need it (like Ukrainian)
+    # The language_code should be available in the translation struct
+    msgstr =
+      case translation.language_code do
+        "uk" ->
+          # For Ukrainian, we need the third form
+          third_form = Map.get(translation, :plural_translation_2, translation.plural_translation)
+          Map.put(initial_msgstr, 2, [third_form])
+
+        # Add other languages that need 3+ forms here
+        "ru" ->
+          Map.put(initial_msgstr, 2, [translation.plural_translation])
+
+        "pl" ->
+          Map.put(initial_msgstr, 2, [translation.plural_translation])
+
+        # For languages with just 2 forms
+        _ ->
+          initial_msgstr
+      end
+
+    %{msg | msgstr: msgstr}
   end
 end

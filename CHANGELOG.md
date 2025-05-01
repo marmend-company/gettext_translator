@@ -6,6 +6,21 @@ All notable changes to this project will be documented in this file.
 ### Added
 - Git integration for committing changes as PRs (optional)
 
+## [0.2.1] - 2025-05-01
+
+### Fixed
+- Fixed path resolution in release environments by using Application.app_dir
+- Added application parameter to properly resolve paths in releases
+- Fixed Ukrainian pluralization by adding support for required third plural form
+- Modified TranslationStore to correctly save and load translations in releases
+- Added ETS-based configuration for LiveDashboard integration
+- Improved PathHelper to handle both development and production environments
+
+### Added
+- New helpers for proper path resolution in both dev and release environments
+- ETS-based configuration state management between LiveView mounts
+- Support for additional plural forms required by specific languages
+
 ## [0.2.0] - 2025-03-08
 ### Added
 - Phoenix LiveDashboard integration for monitoring and managing translations

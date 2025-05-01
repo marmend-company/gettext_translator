@@ -10,14 +10,20 @@ defmodule GettextTranslator.Util.PathHelper do
 
   ## Examples
 
-      iex> changelog_path_for_po("priv/gettext/uk/LC_MESSAGES/default.po")
-      "priv/translation_changelog/uk_default_changelog.json"
+      iex> changelog_path_for_po("priv/gettext/uk/LC_MESSAGES/default.po", :my_app)
+      "/path/to/my_app/priv/translation_changelog/uk_default_changelog.json"
   """
-  def changelog_path_for_po(po_path) do
+  def changelog_path_for_po(po_path, app \\ nil) do
     language_code = extract_language_code(po_path)
     domain = extract_domain(po_path)
 
-    "priv/translation_changelog/#{language_code}_#{domain}_changelog.json"
+    relative_path = "priv/translation_changelog/#{language_code}_#{domain}_changelog.json"
+
+    if app do
+      Application.app_dir(app, relative_path)
+    else
+      relative_path
+    end
   end
 
   @doc """
@@ -59,17 +65,22 @@ defmodule GettextTranslator.Util.PathHelper do
 
   ## Examples
 
-      iex> po_path_for_changelog("priv/translation_changelog/uk_default_changelog.json")
-      "priv/gettext/uk/LC_MESSAGES/default.po"
+      iex> po_path_for_changelog("priv/translation_changelog/uk_default_changelog.json", :my_app)
+      "/path/to/my_app/priv/gettext/uk/LC_MESSAGES/default.po"
   """
-  def po_path_for_changelog(changelog_path) do
+  def po_path_for_changelog(changelog_path, app \\ nil) do
     # Extract language and domain from the changelog path
-    # Format: "priv/translation_changelog/uk_default_changelog.json"
     basename = Path.basename(changelog_path)
 
     case Regex.run(~r|^([^_]+)_([^_]+)_changelog\.json$|, basename) do
       [_, language_code, domain] ->
-        "priv/gettext/#{language_code}/LC_MESSAGES/#{domain}.po"
+        relative_path = "priv/gettext/#{language_code}/LC_MESSAGES/#{domain}.po"
+
+        if app do
+          Application.app_dir(app, relative_path)
+        else
+          relative_path
+        end
 
       _ ->
         Logger.warning(
@@ -82,9 +93,19 @@ defmodule GettextTranslator.Util.PathHelper do
 
   @doc """
   Ensures the translation_changelog directory exists.
+
+  ## Examples
+
+      iex> ensure_changelog_dir(:my_app)
+      :ok
   """
-  def ensure_changelog_dir do
-    changelog_dir = "priv/translation_changelog"
+  def ensure_changelog_dir(app \\ nil) do
+    changelog_dir =
+      if app do
+        Application.app_dir(app, "priv/translation_changelog")
+      else
+        "priv/translation_changelog"
+      end
 
     case File.mkdir_p(changelog_dir) do
       :ok ->
@@ -93,6 +114,38 @@ defmodule GettextTranslator.Util.PathHelper do
       {:error, reason} ->
         Logger.error("Failed to create directory #{changelog_dir}: #{inspect(reason)}")
         {:error, reason}
+    end
+  end
+
+  @doc """
+  Returns the appropriate gettext directory path.
+
+  ## Examples
+
+      iex> gettext_dir(:my_app)
+      "/path/to/my_app/priv/gettext"
+  """
+  def gettext_dir(app \\ nil) do
+    if app do
+      Application.app_dir(app, "priv/gettext")
+    else
+      "priv/gettext"
+    end
+  end
+
+  @doc """
+  Returns the appropriate translation changelog directory path.
+
+  ## Examples
+
+      iex> translation_changelog_dir(:my_app)
+      "/path/to/my_app/priv/translation_changelog"
+  """
+  def translation_changelog_dir(app \\ nil) do
+    if app do
+      Application.app_dir(app, "priv/translation_changelog")
+    else
+      "priv/translation_changelog"
     end
   end
 end

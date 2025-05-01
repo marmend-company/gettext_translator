@@ -20,6 +20,7 @@ defmodule GettextTranslator do
 
       iex> provider = %{ignored_languages: ["fr", "de"]}
       iex> root_path = "path/to/gettext"
+      iex> GettextTranslator.configure(application: :my_app)
       iex> GettextTranslator.translate(provider, root_path)
       {:ok, total_translations}
 
@@ -29,6 +30,40 @@ defmodule GettextTranslator do
   import GettextTranslator.Util.Helper
   alias GettextTranslator.Processor
   alias GettextTranslator.Util.Parser
+  alias GettextTranslator.Util.PathHelper
+
+  @doc """
+  Configures the GettextTranslator module.
+
+  ## Options
+    * `:application` - The OTP application name to use for resolving paths
+
+  ## Example
+
+      iex> GettextTranslator.configure(application: :my_app)
+      :ok
+  """
+  def configure(opts \\ []) do
+    app = Keyword.get(opts, :application)
+
+    if app do
+      # Store the application name in the application environment
+      Application.put_env(:gettext_translator, :application, app)
+
+      # Also set it in the process dictionary for access in different processes
+      Process.put(:gettext_translator_application, app)
+    end
+
+    :ok
+  end
+
+  @doc """
+  Returns the configured application name or nil if not configured.
+  """
+  def application do
+    Application.get_env(:gettext_translator, :application) ||
+      Process.get(:gettext_translator_application)
+  end
 
   @doc """
   Translates the gettext files located at the given root path.
@@ -45,6 +80,7 @@ defmodule GettextTranslator do
     - `provider`: A map or struct that configures the translation process. It must include an
       `ignored_languages` key which is a list of language codes to be skipped.
     - `root_gettext_path`: The root directory path where gettext files are stored.
+                          Can be a relative path "priv/gettext" or an absolute path.
 
   ## Return Value
 
@@ -54,13 +90,23 @@ defmodule GettextTranslator do
   ## Examples
 
       iex> provider = %{ignored_languages: ["fr", "de"]}
-      iex> root_gettext_path = "path/to/gettext"
+      iex> root_gettext_path = "priv/gettext"
       iex> GettextTranslator.translate(provider, root_gettext_path)
       {:ok, total_translations}
 
   """
   def translate(provider, root_gettext_path) do
-    with {:ok, results} <- Parser.scan(root_gettext_path) do
+    # Resolve the path using PathHelper if it's not absolute
+    app = application()
+
+    resolved_path =
+      if Path.type(root_gettext_path) == :absolute do
+        root_gettext_path
+      else
+        PathHelper.gettext_dir(app)
+      end
+
+    with {:ok, results} <- Parser.scan(resolved_path) do
       results
       |> process_folders(provider)
       |> summarize_translations()
