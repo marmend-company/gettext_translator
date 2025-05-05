@@ -14,7 +14,7 @@ defmodule GettextTranslator.Dashboard do
   ```elixir
   def deps do
     [
-      {:gettext_translator, "~> 0.2.0"},
+      {:gettext_translator, "~> 0.3.0"},
       {:phoenix_live_dashboard, ">= 0.6.0"},
       {:phoenix_live_view, ">= 0.17.0"}
     ]

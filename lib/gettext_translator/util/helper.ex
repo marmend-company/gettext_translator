@@ -42,4 +42,22 @@ defmodule GettextTranslator.Util.Helper do
     # Handle errors (e.g., table already exists)
     :error, _ -> true
   end
+
+  def get_application do
+    # Try application environment first
+    # Then try ETS table if it exists
+    # Finally try the global configuration
+    Application.get_env(:gettext_translator, :dashboard_application) ||
+      case :ets.info(:gettext_translator_config) do
+        :undefined ->
+          nil
+
+        _ ->
+          case :ets.lookup(:gettext_translator_config, :application) do
+            [{:application, app}] -> app
+            _ -> nil
+          end
+      end ||
+      GettextTranslator.application()
+  end
 end

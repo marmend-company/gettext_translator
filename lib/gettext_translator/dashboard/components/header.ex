@@ -1,4 +1,4 @@
-defmodule GettextTranslator.Dashboard.HeaderComponent do
+defmodule GettextTranslator.Dashboard.Components.Header do
   @moduledoc """
   Header component for the Gettext Translator dashboard.
   """
@@ -35,6 +35,12 @@ defmodule GettextTranslator.Dashboard.HeaderComponent do
             <form phx-submit="save_to_files" phx-change="noop">
               <button type="submit" class="btn btn-success" phx-disable-with="Saving...">
                 Save Changes to Files
+              </button>
+            </form>
+
+            <form phx-submit="make_pull_request" phx-change="noop">
+              <button type="submit" class="btn btn-info" phx-disable-with="Creating PR...">
+                Make Pull Request
               </button>
             </form>
           <% end %>

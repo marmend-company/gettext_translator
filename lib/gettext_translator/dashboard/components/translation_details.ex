@@ -1,82 +1,3 @@
-defmodule GettextTranslator.Dashboard.Components.TranslationStats do
-  @moduledoc """
-  Component for displaying translation statistics.
-  """
-  use Phoenix.Component
-
-  attr(:translations, :list, required: true)
-
-  def render(assigns) do
-    ~H"""
-    <section id="translation-stats" class="dashboard-card mt-4">
-      <h5 class="card-title">Translation Stats</h5>
-      <div class="card-info">
-        <div class="dashboard-table-container">
-          <table class="table table-hover table-striped">
-            <thead>
-              <tr>
-                <th>Language</th>
-                <th>Domain</th>
-                <th>Count</th>
-                <th>Pending</th>
-                <th>New</th>
-                <th>Approved</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              <%= for language <- @translations |> Enum.map(& &1.language_code) |> Enum.uniq() |> Enum.sort() do %>
-                <%
-                  by_language = Enum.filter(@translations, & &1.language_code == language)
-                  domains = Enum.map(by_language, & &1.domain) |> Enum.uniq() |> Enum.sort()
-                %>
-                <%= for {domain, index} <- Enum.with_index(domains) do %>
-                  <%
-                    domain_translations = Enum.filter(by_language, & &1.domain == domain)
-                    count = length(domain_translations)
-
-                    # Standard status counts
-                    pending = Enum.count(domain_translations, & &1.status == :pending)
-
-                    # Changelog status counts
-                    new_count = Enum.count(domain_translations, & &1.changelog_status == "NEW")
-                    approved_count = Enum.count(domain_translations, & &1.changelog_status == "APPROVED")
-                  %>
-                  <tr>
-                    <%= if index == 0 do %>
-                      <td rowspan={length(domains)} class="align-middle"><%= language %></td>
-                    <% end %>
-                    <td><%= domain %></td>
-                    <td><%= count %></td>
-                    <td class={pending_class(pending)}><%= pending %></td>
-                    <td class="text-success fw-semibold"><%= new_count %></td>
-                    <td class="text-info fw-semibold"><%= approved_count %></td>
-                    <td>
-                      <button
-                        type="button"
-                        phx-click="show_translations"
-                        phx-value-language={language}
-                        phx-value-domain={domain}
-                        class="btn btn-link"
-                      >
-                        View
-                      </button>
-                    </td>
-                  </tr>
-                <% end %>
-              <% end %>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </section>
-    """
-  end
-
-  defp pending_class(0), do: ""
-  defp pending_class(_), do: "text-warning fw-semibold"
-end
-
 defmodule GettextTranslator.Dashboard.Components.TranslationDetails do
   @moduledoc """
   Component for showing and editing translation details.
@@ -186,10 +107,11 @@ defmodule GettextTranslator.Dashboard.Components.TranslationDetails do
                       <%= if Map.has_key?(t, :changelog_status) and not is_nil(t.changelog_status) do %>
                         <div>
                           <.changelog_badge status={t.changelog_status} />
+                          <%= if Map.has_key?(t, :changelog_timestamp) do %>
                           <div class="small text-muted" title={t.changelog_timestamp}>
                             <%= format_date(t.changelog_timestamp) %>
                           </div>
-
+                          <% end %>
                           <%= if t.changelog_status == "MODIFIED" do %>
                             <div class="small text-muted mt-1">
                               <em>Modified</em>
@@ -348,51 +270,4 @@ defmodule GettextTranslator.Dashboard.Components.TranslationDetails do
   end
 
   defp format_date(_), do: "-"
-end
-
-defmodule GettextTranslator.Dashboard.Components.Header do
-  @moduledoc """
-  Header component for the Gettext Translator dashboard.
-  """
-  use Phoenix.Component
-
-  attr(:gettext_path, :string, required: true)
-  attr(:translations_count, :integer, required: true)
-  attr(:translations_loaded, :boolean, required: true)
-
-  def render(assigns) do
-    ~H"""
-    <section class="dashboard-card">
-      <h5 class="card-title">Gettext Translations</h5>
-
-      <div class="dashboard-stats-container">
-        <div class="dashboard-stat">
-          <span class="dashboard-stat-label">Gettext path:</span>
-          <span class="dashboard-stat-value"><%= @gettext_path %></span>
-        </div>
-        <div class="dashboard-stat">
-          <span class="dashboard-stat-label">Loaded translations:</span>
-          <span class="dashboard-stat-value"><%= @translations_count %></span>
-        </div>
-
-        <div class="dashboard-controls-container">
-          <form phx-submit="load_translations" phx-change="noop">
-            <input type="hidden" name="path" value={@gettext_path} />
-            <button type="submit" class="btn btn-primary">
-              <%= if @translations_loaded, do: "Reload", else: "Load" %> Translations
-            </button>
-          </form>
-
-          <%= if @translations_loaded do %>
-            <form phx-submit="save_to_files" phx-change="noop">
-              <button type="submit" class="btn btn-success">
-                Save Changes to Files
-              </button>
-            </form>
-          <% end %>
-        </div>
-      </div>
-    </section>
-    """
-  end
 end

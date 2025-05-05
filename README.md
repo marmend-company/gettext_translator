@@ -43,7 +43,7 @@ Add `gettext_translator` to your dependencies in your `mix.exs`:
 ```elixir
 def deps do
   [
-    {:gettext_translator, "~> 0.2.1"}
+    {:gettext_translator, "~> 0.3.0"}
   ]
 end
 ```
@@ -115,7 +115,7 @@ GettextTranslator provides a web UI for managing translations through Phoenix Li
 ```elixir
 def deps do
   [
-    {:gettext_translator, "~> 0.2.0"},
+    {:gettext_translator, "~> 0.3.0"},
     {:phoenix_live_dashboard, ">= 0.6.0"},
     {:phoenix_live_view, ">= 0.17.0"}
   ]
@@ -213,6 +213,34 @@ translations = GettextTranslator.Dashboard.TranslationStore.list_translations()
 # Filter translations by criteria
 pending = GettextTranslator.Dashboard.TranslationStore.filter_translations(%{status: :pending})
 es_translations = GettextTranslator.Dashboard.TranslationStore.filter_translations(%{language_code: "es"})
+```
+
+### Git Integration
+  Get a token from your Git provider, write_repository and api access is sufficient. As the logic is making PR/MR requests.
+#### GitHub
+
+To use GitHub as a git provider, you need to configure the following options in your `config/config.exs`:
+
+```elixir
+config :gettext_translator, :git_config, %{
+    github_token: "YOUR_GITHUB_TOKEN",
+    repo_url: "https://github.com/YOUR_USERNAME/YOUR_REPOSITORY",
+    base_branch: "main",
+    provider: "github"
+  }
+```
+
+#### GitLab
+
+To use GitLab as a git provider, you need to configure the following options in your `config/config.exs`:
+
+```elixir
+config :gettext_translator, :git_config, %{
+    gitlab_token: "YOUR_GITLAB_TOKEN",
+    repo_url: "https://gitlab.com/YOUR_USERNAME/YOUR_REPOSITORY",
+    base_branch: "main",
+    provider: "gitlab"
+  }
 ```
 
 ### Advanced Examples

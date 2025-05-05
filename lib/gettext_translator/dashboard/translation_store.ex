@@ -357,31 +357,13 @@ defmodule GettextTranslator.Dashboard.TranslationStore do
     end
   end
 
-  defp get_application do
-    # Try application environment first
-    # Then try ETS table if it exists
-    # Finally try the global configuration
-    Application.get_env(:gettext_translator, :dashboard_application) ||
-      case :ets.info(:gettext_translator_config) do
-        :undefined ->
-          nil
-
-        _ ->
-          case :ets.lookup(:gettext_translator_config, :application) do
-            [{:application, app}] -> app
-            _ -> nil
-          end
-      end ||
-      GettextTranslator.application()
-  end
-
-  defp get_entries_by_file do
+  def get_entries_by_file do
     :ets.tab2list(@changelog_table)
     |> Enum.map(fn {_, entry} -> entry end)
     |> Enum.group_by(& &1.source_file)
   end
 
-  defp process_file_entries({file_path, entries}, app) do
+  def process_file_entries({file_path, entries}, app) do
     # Extract language code and domain
     language_code = List.first(entries).code
     domain = extract_domain_from_path(file_path)
@@ -406,13 +388,15 @@ defmodule GettextTranslator.Dashboard.TranslationStore do
 
     if Enum.any?(entries_to_process) do
       # Process and save changelog
-      process_and_save_changelog(changelog_path, changelog, entries_to_process)
+      final_history = process_changelog(changelog, entries_to_process)
+      # Save to file
+      save_changelog_to_file(changelog_path, Map.put(changelog, "history", final_history))
     else
       {:ok, "No changes for #{changelog_path}"}
     end
   end
 
-  defp read_or_create_changelog(path, language_code, file_path) do
+  def read_or_create_changelog(path, language_code, file_path) do
     case File.read(path) do
       {:ok, content} ->
         case Jason.decode(content) do
@@ -435,7 +419,7 @@ defmodule GettextTranslator.Dashboard.TranslationStore do
     end
   end
 
-  defp create_new_changelog(language_code, file_path) do
+  def create_new_changelog(language_code, file_path) do
     %{"history" => [], "language" => language_code, "source_file" => file_path}
   end
 
@@ -445,7 +429,7 @@ defmodule GettextTranslator.Dashboard.TranslationStore do
     end)
   end
 
-  defp process_and_save_changelog(path, changelog, entries_to_process) do
+  def process_changelog(changelog, entries_to_process) do
     history = Map.get(changelog, "history", [])
     entries_by_original = group_entries_by_original(entries_to_process)
 
@@ -456,10 +440,7 @@ defmodule GettextTranslator.Dashboard.TranslationStore do
     remaining_entries = get_remaining_entries(entries_by_original)
 
     # Create final history with any new entries
-    final_history = add_new_history_entries(remaining_entries, updated_history)
-
-    # Save to file
-    save_changelog_to_file(path, Map.put(changelog, "history", final_history))
+    add_new_history_entries(remaining_entries, updated_history)
   end
 
   defp group_entries_by_original(entries) do
@@ -683,7 +664,7 @@ defmodule GettextTranslator.Dashboard.TranslationStore do
 
   defp get_plural_translation_status(_), do: :pending
 
-  defp extract_domain_from_path(file_path) do
+  def extract_domain_from_path(file_path) do
     file_path
     |> Path.basename()
     |> String.replace_suffix(".po", "")
