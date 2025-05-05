@@ -1,4 +1,4 @@
-defmodule GettextTranslator.Dashboard.GettextDashboardCSS do
+defmodule GettextTranslator.Dashboard.Components.GettextDashboardCSS do
   @moduledoc """
   Provides CSS styles for the Gettext Translator Dashboard that match
   Phoenix LiveDashboard's look and feel.

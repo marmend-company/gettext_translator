@@ -10,15 +10,16 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
   import Phoenix.Component
   import Phoenix.HTML, only: [raw: 1]
   import GettextTranslator.Util.Helper
+  import GettextTranslator.Util.PoHelper
 
   require Logger
   alias GettextTranslator.Dashboard.TranslationStore
 
-  alias GettextTranslator.Dashboard.Components.{
-    Header,
-    TranslationDetails,
-    TranslationStats
-  }
+  alias GettextTranslator.Dashboard.Components.Header
+  alias GettextTranslator.Dashboard.Components.TranslationDetails
+  alias GettextTranslator.Dashboard.Components.TranslationStats
+
+  alias GettextTranslator.Util.MakePullRequest
 
   @impl true
   def init(opts) do
@@ -84,7 +85,7 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
 
       ~H"""
       <style>
-        <%= raw GettextTranslator.Dashboard.GettextDashboardCSS.styles() %>
+        <%= raw GettextTranslator.Dashboard.Components.GettextDashboardCSS.styles() %>
       </style>
       <div class="dashboard-container">
         <Header.render
@@ -341,6 +342,34 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
     end
   end
 
+  @impl true
+  def handle_event("make_pull_request", _params, socket) do
+    # Get all translations from the store
+    translations = TranslationStore.list_translations()
+
+    # Get all modified translations
+    modified_translations =
+      Enum.filter(translations, fn t ->
+        t.status == :modified || t.status == :translated
+      end)
+
+    # Get changelog entries
+    changelog_entries = TranslationStore.get_entries_by_file()
+
+    if Enum.empty?(modified_translations) && Enum.empty?(changelog_entries) do
+      {:noreply, socket |> put_flash(:info, "No changes to create pull request for")}
+    else
+      # Create a pull request with the changes
+      case MakePullRequest.create_pull_request(modified_translations, changelog_entries) do
+        {:ok, pr_url} ->
+          {:noreply, socket |> put_flash(:info, "Created pull request: #{pr_url}")}
+
+        {:error, reason} ->
+          {:noreply, socket |> put_flash(:error, "Failed to create pull request: #{reason}")}
+      end
+    end
+  end
+
   # Helper function to ensure TranslationStore is started
   defp ensure_translation_store_started do
     case Process.whereis(TranslationStore) do
@@ -457,45 +486,5 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
       error ->
         error
     end
-  end
-
-  # Helper function to get the message ID from a PO message
-  defp get_message_id(%Expo.Message.Singular{msgid: msgid}), do: Enum.join(msgid, "")
-  defp get_message_id(%Expo.Message.Plural{msgid: msgid}), do: Enum.join(msgid, "")
-
-  # Helper function to update a PO message with new translation
-  defp update_po_message(%Expo.Message.Singular{} = msg, translation) do
-    %{msg | msgstr: [translation.translation]}
-  end
-
-  defp update_po_message(%Expo.Message.Plural{} = msg, translation) do
-    # Base msgstr with the first two forms
-    initial_msgstr = %{
-      0 => [translation.translation],
-      1 => [translation.plural_translation]
-    }
-
-    # Add third form for languages that need it (like Ukrainian)
-    # The language_code should be available in the translation struct
-    msgstr =
-      case translation.language_code do
-        "uk" ->
-          # For Ukrainian, we need the third form
-          third_form = Map.get(translation, :plural_translation_2, translation.plural_translation)
-          Map.put(initial_msgstr, 2, [third_form])
-
-        # Add other languages that need 3+ forms here
-        "ru" ->
-          Map.put(initial_msgstr, 2, [translation.plural_translation])
-
-        "pl" ->
-          Map.put(initial_msgstr, 2, [translation.plural_translation])
-
-        # For languages with just 2 forms
-        _ ->
-          initial_msgstr
-      end
-
-    %{msg | msgstr: msgstr}
   end
 end

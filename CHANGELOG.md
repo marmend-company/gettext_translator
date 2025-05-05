@@ -2,9 +2,9 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
-### Added
-- Git integration for committing changes as PRs (optional)
+## [0.3.0] - 2025-05-04
+- Git integration for committing changes as PRs.
+- Support Gitlab and Github (not fully tested).
 
 ## [0.2.3] - 2025-05-01
 - Fixes for release environments

@@ -4,12 +4,12 @@ defmodule GettextTranslator.MixProject do
   def project do
     [
       app: :gettext_translator,
-      version: "0.2.3",
+      version: "0.3.0",
       elixir: "~> 1.14",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       description:
-        "Elixir Gettext add-on for translations with LLMs and LiveDashboard integration",
+        "Elixir Gettext add-on for translations with LLMs and LiveDashboard integration. Suport making pull request from livedashboard.",
       package: package(),
       source_url: "https://github.com/marmend-company/gettext_translator",
       docs: [
@@ -63,6 +63,7 @@ defmodule GettextTranslator.MixProject do
       {:phoenix_live_dashboard, ">= 0.6.0", optional: true},
       {:phoenix_live_view, ">= 0.17.0", optional: true},
       {:git_cli, "~> 0.3", optional: true},
+      {:finch, "~> 0.16"},
       # Dev dependencies
       {:ex_doc, ">= 0.0.0", only: [:dev], runtime: false},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
