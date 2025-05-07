@@ -4,7 +4,7 @@ defmodule GettextTranslator.MixProject do
   def project do
     [
       app: :gettext_translator,
-      version: "0.3.0",
+      version: "0.4.0",
       elixir: "~> 1.14",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
@@ -22,13 +22,22 @@ defmodule GettextTranslator.MixProject do
             GettextTranslator.Processor.LLM,
             GettextTranslator.Processor.Translator,
             GettextTranslator.Util.Helper,
-            GettextTranslator.Util.Parser
+            GettextTranslator.Util.Parser,
+            GettextTranslator.Util.PoHelper,
+            GettextTranslator.Util.MakePullRequest,
+            GettextTranslator.Util.PathHelper,
+            GettextTranslator.Util.GitHub,
+            GettextTranslator.Util.GitLab
           ],
           Dashboard: [
             GettextTranslator.Dashboard,
             GettextTranslator.Dashboard.DashboardPage,
-            GettextTranslator.Dashboard.TranslationStore,
             GettextTranslator.Supervisor
+          ],
+          Operation: [
+            GettextTranslator.Store,
+            GettextTranslator.Store.Translation,
+            GettextTranslator.Store.Changelog
           ],
           "Mix Tasks": [
             Mix.Tasks.GettextTranslator.Run

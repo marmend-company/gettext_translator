@@ -1,7 +1,8 @@
 defmodule GettextTranslator.Util.MakePullRequest do
   import GettextTranslator.Util.Helper
   import GettextTranslator.Util.PoHelper
-  alias GettextTranslator.Dashboard.TranslationStore
+  require Logger
+
   alias GettextTranslator.Util.GitHub
   alias GettextTranslator.Util.GitLab
   alias GettextTranslator.Util.PathHelper
@@ -105,32 +106,77 @@ defmodule GettextTranslator.Util.MakePullRequest do
       app = get_application()
 
       Enum.flat_map(entries_by_file, fn {file_path, entries} ->
-        {:ok, changelog_path, content} = process_changelog_file_content(file_path, entries, app)
-        [%{path: changelog_path, content: content}]
+        # Get a clean relative path for the source file
+        clean_source_path = cleanup_source_path(file_path)
+
+        # Extract language code and domain
+        language_code = List.first(entries).code
+        domain = extract_domain_from_path(file_path)
+
+        # Construct the changelog path
+        relative_path = "#{language_code}_#{domain}_changelog.json"
+
+        changelog_path =
+          if app do
+            Path.join(PathHelper.translation_changelog_dir(app), relative_path)
+          else
+            Path.join("priv/translation_changelog", relative_path)
+          end
+
+        # Create a simple, clean changelog structure that just tracks status
+        changelog = %{
+          "language" => language_code,
+          "source_file" => clean_source_path,
+          "translations" => create_translations_map(entries)
+        }
+
+        # Convert to JSON, ensuring proper formatting
+        json = Jason.encode!(changelog, pretty: true)
+
+        # Return the changelog path and content
+        [%{path: changelog_path, content: json}]
       end)
     end
   end
 
-  defp process_changelog_file_content(file_path, entries, app) do
-    # Extract language code and domain
-    language_code = List.first(entries).code
-    domain = TranslationStore.extract_domain_from_path(file_path)
+  # Normalize source file path to always be relative
+  defp cleanup_source_path(file_path) do
+    cond do
+      String.match?(file_path, ~r|/priv/gettext/|) ->
+        case Regex.run(~r|.*/priv/gettext/(.+)$|, file_path) do
+          [_, relative_path] -> "priv/gettext/#{relative_path}"
+          nil -> file_path
+        end
 
-    # Construct the changelog path
-    relative_path = "#{language_code}_#{domain}_changelog.json"
+      String.starts_with?(file_path, "priv/gettext/") ->
+        file_path
 
-    changelog_path =
-      if app do
-        Path.join(PathHelper.translation_changelog_dir(app), relative_path)
-      else
-        Path.join("priv/translation_changelog", relative_path)
-      end
+      true ->
+        file_path
+    end
+  end
 
-    changelog =
-      TranslationStore.read_or_create_changelog(changelog_path, language_code, file_path)
+  # Create a simple map of translations with their statuses
+  defp create_translations_map(entries) do
+    Enum.reduce(entries, %{}, fn entry, acc ->
+      # Create a unique key for this translation
+      original_text = Enum.join(entry.original, "")
 
-    final_history = TranslationStore.process_changelog(changelog, entries)
-    json = Jason.encode!(Map.put(changelog, "history", final_history), pretty: true)
-    {:ok, changelog_path, json}
+      # Map the status to a simple string
+      status =
+        case entry.status do
+          "NEW" -> "pending_review"
+          "APPROVED" -> "approved"
+          "MODIFIED" -> "modified"
+          _ -> "pending_review"
+        end
+
+      # Store the translation with its status
+      Map.put(acc, original_text, %{
+        "text" => entry.translated,
+        "status" => status,
+        "last_updated" => DateTime.utc_now() |> DateTime.to_iso8601()
+      })
+    end)
   end
 end

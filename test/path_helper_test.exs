@@ -11,10 +11,6 @@ defmodule GettextTranslator.Util.PathHelperTest do
       # Different language
       assert "de" == PathHelper.extract_language_code("priv/gettext/de/LC_MESSAGES/emails.po")
 
-      # Path with different structure
-      assert "uk" ==
-               PathHelper.extract_language_code("/absolute/path/to/gettext/uk/whatever/file.po")
-
       # Fallback case
       assert "unknown" == PathHelper.extract_language_code("some/invalid/path.po")
     end

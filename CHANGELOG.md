@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.0] - 2025-05-08
+    [Breaking chanegs]
+- Reworked changelog integration to use a simple 1:1 mapping between translations and changelog entries. Previous changelog will be overwritten, therefore new changelog entries will be created with a different structure.
+- Fixed bugs, refactored code.
+- Added visibility which changes are done in current session and will be commited or saved to files.
+
 ## [0.3.0] - 2025-05-04
 - Git integration for committing changes as PRs.
 - Support Gitlab and Github (not fully tested).

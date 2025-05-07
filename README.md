@@ -6,6 +6,10 @@
 
 **Changelog:** See [CHANGELOG.md](CHANGELOG.md) for detailed changes in each version.  
 
+## Important Note
+Observed that regular `:gettext` will create a different structure for the translations than the `GettextTranslator` does. This create a little chaos in the translations while commiting them to the repo. 
+Hack to fix it, run you `mix gettext.extract` one more time after translations are done, that will fix the structure and only new translations will be in diff for commit.
+
 ## Features
 
 - **Multi-Provider Support:** Easily switch between translation endpoints such as Ollama AI and OpenAI.
@@ -43,7 +47,7 @@ Add `gettext_translator` to your dependencies in your `mix.exs`:
 ```elixir
 def deps do
   [
-    {:gettext_translator, "~> 0.3.0"}
+    {:gettext_translator, "~> 0.4.0"}
   ]
 end
 ```
@@ -115,7 +119,7 @@ GettextTranslator provides a web UI for managing translations through Phoenix Li
 ```elixir
 def deps do
   [
-    {:gettext_translator, "~> 0.3.0"},
+    {:gettext_translator, "~> 0.4.0"},
     {:phoenix_live_dashboard, ">= 0.6.0"},
     {:phoenix_live_view, ">= 0.17.0"}
   ]

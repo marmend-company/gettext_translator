@@ -11,7 +11,7 @@ defmodule GettextTranslator.Application do
     children =
       if dashboard_available?() do
         Logger.info("GettextTranslator starting with LiveDashboard integration")
-        [GettextTranslator.Dashboard.TranslationStore, {Finch, name: GettextTranslator.Finch}]
+        [GettextTranslator.Store, {Finch, name: GettextTranslator.Finch}]
       else
         Logger.debug("GettextTranslator starting without LiveDashboard (not available)")
         []

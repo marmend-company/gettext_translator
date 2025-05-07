@@ -1,7 +1,9 @@
-defmodule GettextTranslator.Dashboard.TranslationStoreTest do
+defmodule GettextTranslator.StoreTest do
   use ExUnit.Case
 
-  alias GettextTranslator.Dashboard.TranslationStore
+  alias GettextTranslator.Store
+  alias GettextTranslator.Store.Changelog
+  alias GettextTranslator.Store.Translation
   alias GettextTranslator.Util.PathHelper
 
   @test_po_path "test/fixtures/gettext/uk/LC_MESSAGES/default.po"
@@ -12,11 +14,11 @@ defmodule GettextTranslator.Dashboard.TranslationStoreTest do
     File.mkdir_p!(Path.dirname(@test_po_path))
     File.mkdir_p!(Path.dirname(@test_changelog_path))
 
-    # Handle TranslationStore startup - check if it's already running
-    case Process.whereis(TranslationStore) do
+    # Handle Store startup - check if it's already running
+    case Process.whereis(Store) do
       nil ->
         # Not running - start it
-        start_supervised!(TranslationStore)
+        start_supervised!(Store)
 
       _ ->
         # Already running - reset the tables
@@ -69,10 +71,10 @@ defmodule GettextTranslator.Dashboard.TranslationStoreTest do
       File.write!(@test_po_path, po_content)
 
       # Load translations from the test file
-      TranslationStore.load_translations(Path.dirname(Path.dirname(Path.dirname(@test_po_path))))
+      Translation.load_translations(Path.dirname(Path.dirname(Path.dirname(@test_po_path))))
 
       # Check if translations were loaded
-      translations = TranslationStore.list_translations()
+      translations = Store.list_translations()
       assert length(translations) == 2
 
       # Check specific translations
@@ -99,15 +101,15 @@ defmodule GettextTranslator.Dashboard.TranslationStoreTest do
       File.write!(@test_po_path, po_content)
 
       # Load translations
-      TranslationStore.load_translations(Path.dirname(Path.dirname(Path.dirname(@test_po_path))))
+      Translation.load_translations(Path.dirname(Path.dirname(Path.dirname(@test_po_path))))
 
       # Find the translation
-      translations = TranslationStore.list_translations()
+      translations = Store.list_translations()
       translation = List.first(translations)
 
       # Update the translation
       {:ok, updated} =
-        TranslationStore.update_translation(translation.id, %{
+        Translation.update_translation(translation.id, %{
           translation: "Вітаю",
           status: :modified
         })
@@ -117,7 +119,7 @@ defmodule GettextTranslator.Dashboard.TranslationStoreTest do
       assert updated.status == :modified
 
       # Verify the update in the store
-      translations = TranslationStore.list_translations()
+      translations = Store.list_translations()
       updated_translation = List.first(translations)
       assert updated_translation.translation == "Вітаю"
     end
@@ -138,25 +140,24 @@ defmodule GettextTranslator.Dashboard.TranslationStoreTest do
       File.write!(@test_po_path, po_content)
 
       # Load translations
-      TranslationStore.load_translations(Path.dirname(Path.dirname(Path.dirname(@test_po_path))))
+      Translation.load_translations(Path.dirname(Path.dirname(Path.dirname(@test_po_path))))
 
       # Find the translation
-      translations = TranslationStore.list_translations()
+      translations = Store.list_translations()
       translation = List.first(translations)
 
       # Create a changelog entry
-      {:ok, entry} = TranslationStore.create_changelog_entry(translation, "NEW")
+      entry = Changelog.create_new_changelog_entry(translation, "NEW")
 
       # Check the entry
-      assert entry.status == "NEW"
-      assert entry.original == ["Hello"]
-      assert entry.translated == "Привіт"
+      assert entry.status == :translated
+      assert entry.message_id == "Hello"
+      assert entry.translation == "Привіт"
 
       # Verify translation has changelog info
-      translations = TranslationStore.list_translations()
+      translations = Store.list_translations()
       updated_translation = List.first(translations)
-      assert updated_translation.changelog_status == "NEW"
-      assert updated_translation.changelog_id == entry.id
+      assert updated_translation.id == entry.id
     end
   end
 end

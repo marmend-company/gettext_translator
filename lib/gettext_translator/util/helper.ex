@@ -60,4 +60,10 @@ defmodule GettextTranslator.Util.Helper do
       end ||
       GettextTranslator.application()
   end
+
+  def extract_domain_from_path(file_path) do
+    file_path
+    |> Path.basename()
+    |> String.replace_suffix(".po", "")
+  end
 end

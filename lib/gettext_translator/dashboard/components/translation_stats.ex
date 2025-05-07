@@ -26,31 +26,27 @@ defmodule GettextTranslator.Dashboard.Components.TranslationStats do
             </thead>
             <tbody>
               <%= for language <- @translations |> Enum.map(& &1.language_code) |> Enum.uniq() |> Enum.sort() do %>
-                <%
-                  by_language = Enum.filter(@translations, & &1.language_code == language)
-                  domains = Enum.map(by_language, & &1.domain) |> Enum.uniq() |> Enum.sort()
-                %>
+                <% by_language = Enum.filter(@translations, &(&1.language_code == language))
+                domains = Enum.map(by_language, & &1.domain) |> Enum.uniq() |> Enum.sort() %>
                 <%= for {domain, index} <- Enum.with_index(domains) do %>
-                  <%
-                    domain_translations = Enum.filter(by_language, & &1.domain == domain)
-                    count = length(domain_translations)
+                  <% domain_translations = Enum.filter(by_language, &(&1.domain == domain))
+                  count = length(domain_translations)
 
-                    # Standard status counts
-                    pending = Enum.count(domain_translations, & &1.status == :pending)
+                  pending = Enum.count(domain_translations, &(&1.status == :pending))
 
-                    # Changelog status counts
-                    new_count = Enum.count(domain_translations, & &1.changelog_status == "NEW")
-                    approved_count = Enum.count(domain_translations, & &1.changelog_status == "APPROVED")
-                  %>
+                  new_count = Enum.count(domain_translations, &(&1.changelog_status == "NEW"))
+
+                  approved_count =
+                    Enum.count(domain_translations, &(&1.changelog_status == "APPROVED")) %>
                   <tr>
                     <%= if index == 0 do %>
-                      <td rowspan={length(domains)} class="align-middle"><%= language %></td>
+                      <td rowspan={length(domains)} class="align-middle">{language}</td>
                     <% end %>
-                    <td><%= domain %></td>
-                    <td><%= count %></td>
-                    <td class={pending_class(pending)}><%= pending %></td>
-                    <td class="text-success fw-semibold"><%= new_count %></td>
-                    <td class="text-info fw-semibold"><%= approved_count %></td>
+                    <td>{domain}</td>
+                    <td>{count}</td>
+                    <td class={pending_class(pending)}>{pending}</td>
+                    <td class="text-success fw-semibold">{new_count}</td>
+                    <td class="text-info fw-semibold">{approved_count}</td>
                     <td>
                       <button
                         type="button"
