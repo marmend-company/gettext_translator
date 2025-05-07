@@ -35,12 +35,8 @@ defmodule GettextTranslator.Dashboard.Components.TranslationDetails do
     ~H"""
     <section id="translation-details" class="dashboard-card mt-4">
       <div class="card-title-container">
-        <h5 class="card-title"><%= @viewing_language %> / <%= @viewing_domain %> Translations</h5>
-        <button
-          type="button"
-          phx-click="hide_translations"
-          class="btn btn-link"
-        >
+        <h5 class="card-title">{@viewing_language} / {@viewing_domain} Translations</h5>
+        <button type="button" phx-click="hide_translations" class="btn btn-link">
           <i class="fa fa-times"></i> Close
         </button>
       </div>
@@ -48,6 +44,13 @@ defmodule GettextTranslator.Dashboard.Components.TranslationDetails do
       <div class="card-info">
         <div class="dashboard-table-container">
           <table class="table table-hover table-striped">
+            <colgroup>
+              <col style="width: 40%;" />
+              <col style="width: 40%;" />
+              <col style="width: 7%;" />
+              <col style="width: 7%;" />
+              <col style="width: 6%;" />
+            </colgroup>
             <thead>
               <tr>
                 <th>Message ID</th>
@@ -60,14 +63,11 @@ defmodule GettextTranslator.Dashboard.Components.TranslationDetails do
             <tbody>
               <%= for t <- @filtered_translations do %>
                 <tr>
-                  <td class="message-id-cell">
-                    <div class="message-id" title={t.message_id}>
-                      <%= t.message_id %>
-                    </div>
-
+                  <td style="vertical-align: middle; padding: 12px 0 12px 8px; text-align: left;">
+                    {t.message_id}
                     <%= if t.type == :plural do %>
-                      <div class="plural-id" title={t.plural_id}>
-                        (plural) <%= t.plural_id %>
+                      <div style="margin-top: 6px;">
+                        (plural) {t.plural_id}
                       </div>
                     <% end %>
                   </td>
@@ -77,44 +77,38 @@ defmodule GettextTranslator.Dashboard.Components.TranslationDetails do
                       <.translation_edit_form translation={t} />
                     </td>
                   <% else %>
-                    <td class="translation-cell">
+                    <td style="vertical-align: middle; padding: 12px 0 12px 8px; text-align: left;">
                       <%= if empty_string?(t.translation) do %>
                         <span class="text-danger">(empty)</span>
                       <% else %>
-                        <div class="translation-content">
-                          <%= t.translation %>
-                        </div>
+                        {t.translation}
                       <% end %>
 
                       <%= if t.type == :plural do %>
-                        <div class="plural-translation">
+                        <div style="margin-top: 6px;">
                           <%= if empty_string?(t.plural_translation) do %>
                             <span class="text-danger">(empty)</span>
                           <% else %>
-                            <div class="translation-content">
-                              <%= t.plural_translation %>
-                            </div>
+                            {t.plural_translation}
                           <% end %>
                         </div>
                       <% end %>
                     </td>
 
-                    <td>
+                    <td class="text-center" style="vertical-align: middle;">
                       <.status_badge status={t.status} />
                     </td>
 
-                    <td>
+                    <td class="text-center" style="vertical-align: middle;">
                       <%= if Map.has_key?(t, :changelog_status) and not is_nil(t.changelog_status) do %>
                         <div>
                           <.changelog_badge status={t.changelog_status} />
                           <%= if Map.has_key?(t, :changelog_timestamp) do %>
-                          <div class="small text-muted" title={t.changelog_timestamp}>
-                            <%= format_date(t.changelog_timestamp) %>
-                          </div>
-                          <% end %>
-                          <%= if t.changelog_status == "MODIFIED" do %>
-                            <div class="small text-muted mt-1">
-                              <em>Modified</em>
+                            <div
+                              class="small text-muted"
+                              style="font-size: 0.75rem; white-space: nowrap;"
+                            >
+                              {format_date(t.changelog_timestamp)}
                             </div>
                           <% end %>
                         </div>
@@ -123,12 +117,12 @@ defmodule GettextTranslator.Dashboard.Components.TranslationDetails do
                       <% end %>
                     </td>
 
-                    <td class="action-cell">
+                    <td class="action-cell text-center" style="vertical-align: middle;">
                       <div class="action-buttons">
                         <button
                           phx-click="edit_translation"
                           phx-value-id={t.id}
-                          class="btn btn-link"
+                          class="btn btn-link p-0"
                         >
                           Edit
                         </button>
@@ -138,7 +132,7 @@ defmodule GettextTranslator.Dashboard.Components.TranslationDetails do
                             <button
                               phx-click="approve_translation"
                               phx-value-id={t.id}
-                              class="btn btn-link text-success"
+                              class="btn btn-link text-success p-0 d-block"
                             >
                               Approve
                             </button>
@@ -146,7 +140,7 @@ defmodule GettextTranslator.Dashboard.Components.TranslationDetails do
                             <button
                               phx-click="approve_translation"
                               phx-value-id={t.id}
-                              class="btn btn-link text-success"
+                              class="btn btn-link text-success p-0 d-block"
                             >
                               Approve
                             </button>
@@ -174,37 +168,22 @@ defmodule GettextTranslator.Dashboard.Components.TranslationDetails do
       <input type="hidden" name="_id" value={@translation.id} />
       <div class="form-group">
         <label class="form-label">Translation</label>
-        <textarea
-          name="translation"
-          rows="2"
-          class="form-control"
-        ><%= @translation.translation || "" %></textarea>
+        <textarea name="translation" rows="2" class="form-control"><%= @translation.translation || "" %></textarea>
       </div>
 
       <%= if @translation.type == :plural do %>
         <div class="form-group mt-2">
           <label class="form-label">Plural Translation</label>
-          <textarea
-            name="plural_translation"
-            rows="2"
-            class="form-control"
-          ><%= @translation.plural_translation || "" %></textarea>
+          <textarea name="plural_translation" rows="2" class="form-control"><%= @translation.plural_translation || "" %></textarea>
         </div>
       <% end %>
 
       <div class="form-actions">
-        <button
-          type="button"
-          phx-click="cancel_edit"
-          class="btn btn-secondary btn-sm"
-        >
+        <button type="button" phx-click="cancel_edit" class="btn btn-secondary btn-sm">
           Cancel
         </button>
 
-        <button
-          type="submit"
-          class="btn btn-primary btn-sm"
-        >
+        <button type="submit" class="btn btn-primary btn-sm">
           Save
         </button>
       </div>
@@ -234,7 +213,7 @@ defmodule GettextTranslator.Dashboard.Components.TranslationDetails do
 
     ~H"""
     <span class={@badge_class}>
-      <%= @label %>
+      {@label}
     </span>
     """
   end
@@ -254,7 +233,7 @@ defmodule GettextTranslator.Dashboard.Components.TranslationDetails do
 
     ~H"""
     <span class={@badge_class}>
-      <%= @status %>
+      {@status}
     </span>
     """
   end

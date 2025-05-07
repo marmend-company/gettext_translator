@@ -35,13 +35,13 @@ defmodule GettextTranslator.Supervisor do
   def init(_opts) do
     children =
       if dashboard_available?() do
-        if Process.whereis(GettextTranslator.Dashboard.TranslationStore) do
+        if Process.whereis(GettextTranslator.Store) do
           # Store already running, don't start it again
           Logger.info("GettextTranslator dashboard enabled (using existing TranslationStore)")
           []
         else
           Logger.info("GettextTranslator dashboard enabled")
-          [GettextTranslator.Dashboard.TranslationStore]
+          [GettextTranslator.Store]
         end
       else
         Logger.debug(

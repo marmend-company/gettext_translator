@@ -165,28 +165,60 @@ defmodule GettextTranslator.Processor do
     # Use the PathHelper to get the changelog path
     changelog_file = PathHelper.changelog_path_for_po(file_path, app)
 
-    now = DateTime.utc_now()
+    # Format new translations according to the expected structure
+    new_entries =
+      Enum.map(translations, fn translation ->
+        original_text =
+          case translation.original do
+            [text] when is_binary(text) -> text
+            list when is_list(list) -> Enum.join(list, "")
+            _ -> ""
+          end
 
-    new_entries = %{
-      "timestamp" => DateTime.to_iso8601(now),
-      "entries" => translations
-    }
+        %{
+          "original" => original_text,
+          "translated" => translation.translated,
+          "status" => "NEW",
+          "timestamp" => translation.timestamp
+        }
+      end)
 
+    # Load existing content or create new structure
     existing_content =
       if File.exists?(changelog_file) do
         case File.read!(changelog_file) |> Jason.decode() do
           {:ok, content} -> content
-          {:error, _} -> %{"language" => code, "source_file" => file_path, "history" => []}
+          {:error, _} -> %{"language" => code, "source_file" => file_path, "entries" => []}
         end
       else
-        %{"language" => code, "source_file" => file_path, "history" => []}
+        %{"language" => code, "source_file" => file_path, "entries" => []}
       end
 
-    # Append new entries to history
-    updated_content =
-      Map.update(existing_content, "history", [new_entries], fn history ->
-        [new_entries | history]
+    # Merge existing entries with new ones
+    existing_entries = Map.get(existing_content, "entries", [])
+
+    # Create a map of existing entries by original text for fast lookup
+    existing_entries_map =
+      Enum.reduce(existing_entries, %{}, fn entry, acc ->
+        Map.put(acc, entry["original"], entry)
       end)
+
+    # Only add new entries that don't already exist
+    final_entries =
+      Enum.reduce(new_entries, existing_entries_map, fn entry, acc ->
+        case Map.has_key?(acc, entry["original"]) do
+          true -> acc
+          false -> Map.put(acc, entry["original"], entry)
+        end
+      end)
+      |> Map.values()
+
+    # Update content with merged entries
+    updated_content = %{
+      "language" => code,
+      "source_file" => file_path,
+      "entries" => final_entries
+    }
 
     # Write the updated changelog
     File.write!(changelog_file, Jason.encode!(updated_content, pretty: true))

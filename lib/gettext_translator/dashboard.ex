@@ -1,5 +1,6 @@
 defmodule GettextTranslator.Dashboard do
-  alias GettextTranslator.Dashboard.TranslationStore
+  alias GettextTranslator.Store
+  alias GettextTranslator.Store.Translation
 
   @moduledoc """
   Phoenix LiveDashboard integration for GettextTranslator.
@@ -14,7 +15,7 @@ defmodule GettextTranslator.Dashboard do
   ```elixir
   def deps do
     [
-      {:gettext_translator, "~> 0.3.0"},
+      {:gettext_translator, "~> 0.4.0"},
       {:phoenix_live_dashboard, ">= 0.6.0"},
       {:phoenix_live_view, ">= 0.17.0"}
     ]
@@ -162,7 +163,7 @@ defmodule GettextTranslator.Dashboard do
   called directly if needed.
   """
   def start_translation_store do
-    TranslationStore.start_link()
+    Store.start_link()
   end
 
   @doc """
@@ -178,7 +179,7 @@ defmodule GettextTranslator.Dashboard do
   or `{:error, reason}` if loading failed.
   """
   def load_translations(gettext_path \\ "priv/gettext") do
-    TranslationStore.load_translations(gettext_path)
+    Translation.load_translations(gettext_path)
   end
 
   @doc """
@@ -205,7 +206,7 @@ defmodule GettextTranslator.Dashboard do
     {:ok, count} = load_translations(gettext_path)
 
     # Get all translations and calculate some stats
-    translations = TranslationStore.list_translations()
+    translations = Store.list_translations()
     languages = translations |> Enum.map(& &1.language_code) |> Enum.uniq() |> Enum.sort()
     domains = translations |> Enum.map(& &1.domain) |> Enum.uniq() |> Enum.sort()
     pending = Enum.count(translations, &(&1.status == :pending))
