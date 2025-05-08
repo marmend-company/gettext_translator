@@ -2,6 +2,9 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.1] - 2025-05-08
+- Fixed bugs.
+
 ## [0.4.0] - 2025-05-08
     [Breaking chanegs]
 - Reworked changelog integration to use a simple 1:1 mapping between translations and changelog entries. Previous changelog will be overwritten, therefore new changelog entries will be created with a different structure.
