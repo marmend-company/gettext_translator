@@ -191,53 +191,50 @@ defmodule GettextTranslator.Store.Changelog do
         "#{language_code}_#{domain}_changelog.json"
       )
 
-    # 1. Load existing changelog entries from file if it exists
-    existing_entries = load_existing_entries(changelog_path, language_code, file_path)
+    # 1. Load existing changelog file if it exists
+    existing_content = load_existing_changelog(changelog_path, language_code, file_path)
 
-    # 2. Create a map of entries by original text for fast lookup
-    existing_entries_map =
-      Enum.reduce(existing_entries, %{}, fn entry, acc ->
-        Map.put(acc, entry["original"], entry)
-      end)
+    # 2. Get existing translations map or create a new one
+    existing_translations = Map.get(existing_content, "translations", %{})
 
-    # 3. Prepare modified entries for saving - convert MODIFIED to APPROVED
-    prepared_modified_entries =
-      Enum.map(modified_entries, fn entry ->
+    # 3. Process modified entries and prepare for saving
+    modified_translations =
+      Enum.reduce(modified_entries, %{}, fn entry, acc ->
+        # Get the original message ID to use as key
         original_key = Enum.join(entry.original, "")
-        status = if entry.status == "MODIFIED", do: "APPROVED", else: entry.status
 
-        %{
-          "original" => original_key,
-          "translated" => entry.translated,
+        # Determine status - convert MODIFIED to approved
+        status =
+          case entry.status do
+            "MODIFIED" -> "approved"
+            "APPROVED" -> "approved"
+            "NEW" -> "pending_review"
+            _ -> "pending_review"
+          end
+
+        # Create entry for the map
+        Map.put(acc, original_key, %{
           "status" => status,
-          "timestamp" => entry.timestamp
-        }
+          "text" => entry.translated,
+          "last_updated" => entry.timestamp
+        })
       end)
 
-    # 4. Create a map of modified entries by original text
-    modified_entries_map =
-      Enum.reduce(prepared_modified_entries, %{}, fn entry, acc ->
-        Map.put(acc, entry["original"], entry)
-      end)
-
-    # 5. Merge existing with modified entries, giving priority to modified ones
+    # 4. Merge existing with modified translations, giving priority to modified ones
     # This preserves entries that weren't modified in this session
-    merged_entries_map = Map.merge(existing_entries_map, modified_entries_map)
+    merged_translations = Map.merge(existing_translations, modified_translations)
 
-    # 6. Convert the map back to a list
-    final_entries = Map.values(merged_entries_map)
-
-    # 7. Prepare the changelog JSON structure
-    changelog = %{
+    # 5. Prepare the final changelog structure
+    updated_content = %{
       "language" => language_code,
       "source_file" => file_path,
-      "entries" => final_entries
+      "translations" => merged_translations
     }
 
-    # 8. Save to file
-    case File.write(changelog_path, Jason.encode!(changelog, pretty: true)) do
+    # 6. Save to file
+    case File.write(changelog_path, Jason.encode!(updated_content, pretty: true)) do
       :ok ->
-        # 9. Mark entries as not modified after successful save
+        # 7. Mark entries as not modified after successful save
         Enum.each(modified_entries, fn entry ->
           Store.insert_changelog(entry.id, Map.put(entry, :modified, false))
         end)
@@ -250,35 +247,80 @@ defmodule GettextTranslator.Store.Changelog do
     end
   end
 
-  defp load_existing_entries(changelog_path, _language_code, _file_path) do
+  defp load_existing_changelog(changelog_path, language_code, file_path) do
     case File.read(changelog_path) do
       {:ok, content} ->
         case Jason.decode(content) do
+          {:ok, content = %{"translations" => _}} ->
+            # Content already has the correct structure
+            content
+
           {:ok, %{"entries" => entries}} when is_list(entries) ->
-            entries
+            # Convert from old structure to new structure
+            translations =
+              Enum.reduce(entries, %{}, fn entry, acc ->
+                Map.put(acc, entry["original"], %{
+                  "status" => convert_status(entry["status"]),
+                  "text" => entry["translated"],
+                  "last_updated" => entry["timestamp"]
+                })
+              end)
+
+            %{
+              "language" => language_code,
+              "source_file" => file_path,
+              "translations" => translations
+            }
 
           _ ->
-            # Invalid format, return empty array
-            []
+            # Invalid format, return empty structure
+            %{
+              "language" => language_code,
+              "source_file" => file_path,
+              "translations" => %{}
+            }
         end
 
       {:error, :enoent} ->
         # File doesn't exist yet
-        []
+        %{
+          "language" => language_code,
+          "source_file" => file_path,
+          "translations" => %{}
+        }
 
       {:error, reason} ->
         Logger.error("Error reading changelog #{changelog_path}: #{inspect(reason)}")
-        []
+
+        %{
+          "language" => language_code,
+          "source_file" => file_path,
+          "translations" => %{}
+        }
     end
   end
 
-  # Private functions
+  defp convert_status(status) do
+    case status do
+      "MODIFIED" -> "approved"
+      "APPROVED" -> "approved"
+      "NEW" -> "pending_review"
+      _ -> "pending_review"
+    end
+  end
 
   defp process_changelog_file(changelog_path, source_file, language_code) do
     case File.read(changelog_path) do
       {:ok, content} ->
         case Jason.decode(content) do
+          {:ok, %{"translations" => translations}} when is_map(translations) ->
+            # Process new format with translations map
+            Enum.map(translations, fn {original, entry} ->
+              process_changelog_translation(original, entry, source_file, language_code)
+            end)
+
           {:ok, %{"entries" => entries}} when is_list(entries) ->
+            # Process old format with entries array
             Enum.map(entries, fn entry ->
               process_changelog_entry(entry, source_file, language_code)
             end)
@@ -296,6 +338,38 @@ defmodule GettextTranslator.Store.Changelog do
         Logger.error("Error reading changelog #{changelog_path}: #{inspect(reason)}")
         []
     end
+  end
+
+  defp process_changelog_translation(original, entry, source_file, language_code) do
+    # Create a unique ID for this entry
+    entry_id =
+      :crypto.hash(:sha256, "#{source_file}|#{original}|#{entry["last_updated"]}")
+      |> Base.encode16()
+
+    # Convert status back to uppercase format for internal use
+    status =
+      case entry["status"] do
+        "approved" -> "APPROVED"
+        "pending_review" -> "NEW"
+        _ -> "NEW"
+      end
+
+    changelog_entry = %{
+      id: entry_id,
+      code: language_code,
+      status: status,
+      timestamp: entry["last_updated"],
+      original: [original],
+      translated: entry["text"],
+      source_file: source_file,
+      # Not modified until changed
+      modified: false
+    }
+
+    # Store in changelog table
+    Store.insert_changelog(entry_id, changelog_entry)
+
+    changelog_entry
   end
 
   defp process_changelog_entry(entry, source_file, language_code) do

@@ -159,7 +159,6 @@ defmodule GettextTranslator.Util.MakePullRequest do
   # Create a simple map of translations with their statuses
   defp create_translations_map(entries) do
     Enum.reduce(entries, %{}, fn entry, acc ->
-      # Create a unique key for this translation
       original_text = Enum.join(entry.original, "")
 
       # Map the status to a simple string
@@ -171,12 +170,35 @@ defmodule GettextTranslator.Util.MakePullRequest do
           _ -> "pending_review"
         end
 
-      # Store the translation with its status
+      # Look up if there's an existing entry in the changelog with the same content
+      # If text or status changed, update timestamp; otherwise keep the original
+      timestamp =
+        if entry_changed?(entry, status) do
+          DateTime.utc_now() |> DateTime.to_iso8601()
+        else
+          entry.timestamp
+        end
+
+      # Store the translation with correct timestamp
       Map.put(acc, original_text, %{
         "text" => entry.translated,
         "status" => status,
-        "last_updated" => DateTime.utc_now() |> DateTime.to_iso8601()
+        "last_updated" => timestamp
       })
     end)
+  end
+
+  # Helper to determine if an entry's content changed
+  defp entry_changed?(entry, new_status) do
+    old_status =
+      case entry.status do
+        "NEW" -> "pending_review"
+        "APPROVED" -> "approved"
+        "MODIFIED" -> "modified"
+        other -> other
+      end
+
+    # Compare the normalized status with the entry's status
+    new_status != old_status
   end
 end
