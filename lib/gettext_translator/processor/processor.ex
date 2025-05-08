@@ -165,59 +165,99 @@ defmodule GettextTranslator.Processor do
     # Use the PathHelper to get the changelog path
     changelog_file = PathHelper.changelog_path_for_po(file_path, app)
 
-    # Format new translations according to the expected structure
-    new_entries =
-      Enum.map(translations, fn translation ->
-        original_text =
-          case translation.original do
-            [text] when is_binary(text) -> text
-            list when is_list(list) -> Enum.join(list, "")
-            _ -> ""
-          end
-
-        %{
-          "original" => original_text,
-          "translated" => translation.translated,
-          "status" => "NEW",
-          "timestamp" => translation.timestamp
-        }
-      end)
-
     # Load existing content or create new structure
     existing_content =
       if File.exists?(changelog_file) do
         case File.read!(changelog_file) |> Jason.decode() do
           {:ok, content} -> content
-          {:error, _} -> %{"language" => code, "source_file" => file_path, "entries" => []}
+          {:error, _} -> %{"language" => code, "source_file" => file_path, "translations" => %{}}
         end
       else
-        %{"language" => code, "source_file" => file_path, "entries" => []}
+        %{"language" => code, "source_file" => file_path, "translations" => %{}}
       end
 
-    # Merge existing entries with new ones
-    existing_entries = Map.get(existing_content, "entries", [])
+    # Get existing translations map or create a new one
+    existing_translations = Map.get(existing_content, "translations", %{})
 
-    # Create a map of existing entries by original text for fast lookup
-    existing_entries_map =
-      Enum.reduce(existing_entries, %{}, fn entry, acc ->
-        Map.put(acc, entry["original"], entry)
-      end)
+    # Format and merge new translations
+    updated_translations =
+      Enum.reduce(translations, existing_translations, fn translation, acc ->
+        # Extract the original message ID to use as the key
+        message_id =
+          case translation do
+            %{type: :singular, original: original} when is_list(original) ->
+              Enum.join(original, "")
 
-    # Only add new entries that don't already exist
-    final_entries =
-      Enum.reduce(new_entries, existing_entries_map, fn entry, acc ->
-        case Map.has_key?(acc, entry["original"]) do
-          true -> acc
-          false -> Map.put(acc, entry["original"], entry)
+            %{type: :singular, original: original} when is_binary(original) ->
+              original
+
+            %{type: :plural, original_singular: singular} ->
+              singular
+
+            %{original: original} when is_list(original) ->
+              Enum.join(original, "")
+
+            %{original: original} when is_binary(original) ->
+              original
+
+            _ ->
+              ""
+          end
+
+        # Extract the translated text
+        translated_text =
+          case translation do
+            %{type: :singular, translated: text} ->
+              text
+
+            %{type: :plural, translated_singular: singular, translated_plural: plural} ->
+              "#{singular} | #{plural}"
+
+            %{translated: text} when is_binary(text) ->
+              text
+
+            _ ->
+              ""
+          end
+
+        # Skip if message_id is empty
+        if message_id == "" do
+          acc
+        else
+          # Only add if not already exists or if newer
+          case Map.get(acc, message_id) do
+            nil ->
+              # No existing entry, add new one
+              Map.put(acc, message_id, %{
+                "status" => "pending_review",
+                "text" => translated_text,
+                "last_updated" => translation.timestamp
+              })
+
+            existing ->
+              # If existing entry has timestamp, compare it
+              existing_timestamp = Map.get(existing, "last_updated", "1970-01-01T00:00:00Z")
+
+              if translation.timestamp > existing_timestamp do
+                # New translation is newer, update it
+                Map.put(acc, message_id, %{
+                  "status" => "pending_review",
+                  "text" => translated_text,
+                  "last_updated" => translation.timestamp
+                })
+              else
+                # Keep existing entry
+                acc
+              end
+          end
         end
       end)
-      |> Map.values()
 
-    # Update content with merged entries
+    # Update the content with merged translations
     updated_content = %{
       "language" => code,
       "source_file" => file_path,
-      "entries" => final_entries
+      "translations" => updated_translations
     }
 
     # Write the updated changelog
