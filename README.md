@@ -47,7 +47,7 @@ Add `gettext_translator` to your dependencies in your `mix.exs`:
 ```elixir
 def deps do
   [
-    {:gettext_translator, "~> 0.4.1"}
+    {:gettext_translator, "~> 0.4.2"}
   ]
 end
 ```
@@ -119,7 +119,7 @@ GettextTranslator provides a web UI for managing translations through Phoenix Li
 ```elixir
 def deps do
   [
-    {:gettext_translator, "~> 0.4.1"},
+    {:gettext_translator, "~> 0.4.2"},
     {:phoenix_live_dashboard, ">= 0.6.0"},
     {:phoenix_live_view, ">= 0.17.0"}
   ]
