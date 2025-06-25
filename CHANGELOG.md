@@ -2,6 +2,9 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.3] - 2025-06-25
+- Fixed bug regarding a new creation of changelog entries when making PRs to gitlab.
+
 ## [0.4.2] - 2025-05-08
 - Fixed difference in changelog structure when making PR and saving locally to files.
 

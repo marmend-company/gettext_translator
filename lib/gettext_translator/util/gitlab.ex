@@ -48,14 +48,13 @@ defmodule GettextTranslator.Util.GitLab do
     # Prepare actions for all files
     actions =
       Enum.map(file_changes, fn %{path: path, content: content} ->
-        # Ensure content is a string
         content_str = if is_binary(content), do: content, else: to_string(content)
-
-        # Encode content to Base64
         content_base64 = Base.encode64(content_str)
 
+        action = get_file_action(project_path, path, base_branch, token)
+
         %{
-          "action" => "update",
+          "action" => action,
           "file_path" => path,
           "content" => content_base64,
           "encoding" => "base64"
@@ -131,6 +130,23 @@ defmodule GettextTranslator.Util.GitLab do
 
       {:error, reason} ->
         {:error, "HTTP request failed: #{inspect(reason)}"}
+    end
+  end
+
+  defp get_file_action(project_path, file_path, branch, token) do
+    url =
+      "https://gitlab.com/api/v4/projects/#{project_path}/repository/files/#{URI.encode_www_form(file_path)}"
+
+    headers = [{"private-token", token}]
+    params = "?ref=#{branch}"
+
+    request = Finch.build(:get, url <> params, headers)
+
+    case Finch.request(request, GettextTranslator.Finch) do
+      {:ok, %Finch.Response{status: 200}} -> "update"
+      {:ok, %Finch.Response{status: 404}} -> "create"
+      # Default to create on errors
+      _ -> "create"
     end
   end
 end
