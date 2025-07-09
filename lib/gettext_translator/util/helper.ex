@@ -9,7 +9,7 @@ defmodule GettextTranslator.Util.Helper do
 
   def empty_string?(nil), do: true
   def empty_string?(str) when is_binary(str), do: String.trim(str) == ""
-  def empty_string?(str) when is_binary(str), do: false
+  def empty_string?(_), do: false
 
   def store_config(key, value) when not is_nil(value) do
     ensure_config_table()

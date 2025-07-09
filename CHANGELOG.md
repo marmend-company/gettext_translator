@@ -2,6 +2,9 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.4] - 2025-06-25
+- Fixed bug with plural translations [#14](https://github.com/marmend-company/gettext_translator/issues/14)
+
 ## [0.4.3] - 2025-06-25
 - Fixed bug regarding a new creation of changelog entries when making PRs to gitlab.
 

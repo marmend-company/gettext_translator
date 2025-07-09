@@ -61,6 +61,12 @@ defmodule GettextTranslator.Processor do
     empty_string?(Enum.join(val1, " ")) || empty_string?(Enum.join(val2, " "))
   end
 
+  defp translation_empty?(%Message.Plural{:msgstr => msgstr}) do
+    msgstr
+    |> Map.values()
+    |> Enum.any?(fn val -> empty_string?(Enum.join(val, " ")) end)
+  end
+
   defp log_translation_status(file_path, count, code),
     do:
       Logger.info(
