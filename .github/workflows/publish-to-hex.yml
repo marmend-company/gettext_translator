@@ -15,7 +15,7 @@ jobs:
 
     steps:
       - name: Checkout this repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install Erlang and Elixir
         uses: erlef/setup-beam@v1
