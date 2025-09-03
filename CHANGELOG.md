@@ -2,6 +2,9 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.5] - 2025-09-03
+- Fixed bug regarding  nil values in the message strings that the Expo.PO.Composer can't handle.
+
 ## [0.4.4] - 2025-06-25
 - Fixed bug with plural translations [#14](https://github.com/marmend-company/gettext_translator/issues/14)
 
