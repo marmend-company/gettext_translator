@@ -53,25 +53,25 @@ defmodule GettextTranslator.Processor do
     end
   end
 
-  defp translation_empty?(%Message.Singular{:msgstr => val}) do
+  defp translation_empty?(%Message.Singular{msgstr: val}) do
     empty_string?(Enum.join(val, " "))
   end
 
-  defp translation_empty?(%Message.Plural{:msgstr => %{0 => val1, 1 => val2}}) do
+  defp translation_empty?(%Message.Plural{msgstr: %{0 => val1, 1 => val2}}) do
     empty_string?(Enum.join(val1, " ")) || empty_string?(Enum.join(val2, " "))
   end
 
-  defp translation_empty?(%Message.Plural{:msgstr => msgstr}) do
+  defp translation_empty?(%Message.Plural{msgstr: msgstr}) do
     msgstr
     |> Map.values()
     |> Enum.any?(fn val -> empty_string?(Enum.join(val, " ")) end)
   end
 
-  defp log_translation_status(file_path, count, code),
-    do:
-      Logger.info(
-        "Translation file `#{file_path}` has #{count} entries that need to be translated to `#{code}`"
-      )
+  defp log_translation_status(file_path, count, code) do
+    Logger.info(
+      "Translation file `#{file_path}` has #{count} entries that need to be translated to `#{code}`"
+    )
+  end
 
   defp translate_messages(messages, provider, code, count) do
     Enum.with_index(messages)
@@ -93,7 +93,10 @@ defmodule GettextTranslator.Processor do
     Logger.info("#{index}/#{count} - translating message `#{val}` to `#{code}` ")
 
     {:ok, translated_value} = translate_text(provider, val, code)
-    translated_text = translated_value.last_message.content
+
+    translated_text =
+      translated_value.last_message.content
+      |> ensure_string()
 
     changelog_entry = %{
       type: :singular,
@@ -121,33 +124,65 @@ defmodule GettextTranslator.Processor do
       "#{index}/#{count} - translating plural message `#{value_singular}` / `#{value_plural}` to `#{code}` "
     )
 
-    {:ok, translated_singular} = translate_text(provider, value_singular, code)
-    {:ok, translated_plural} = translate_text(provider, value_plural, code)
+    with {:ok, translated_singular} <- translate_text(provider, value_singular, code),
+         {:ok, translated_plural} <- translate_text(provider, value_plural, code) do
+      singular_text =
+        translated_singular.last_message.content
+        |> ensure_string()
 
-    singular_text = translated_singular.last_message.content
-    plural_text = translated_plural.last_message.content
+      plural_text =
+        translated_plural.last_message.content
+        |> ensure_string()
 
-    changelog_entry = %{
-      type: :plural,
-      original_singular: value_singular,
-      original_plural: value_plural,
-      translated_singular: singular_text,
-      translated_plural: plural_text,
-      code: code,
-      status: "NEW",
-      timestamp: DateTime.utc_now() |> DateTime.to_iso8601()
-    }
+      changelog_entry = %{
+        type: :plural,
+        original_singular: value_singular,
+        original_plural: value_plural,
+        translated_singular: singular_text,
+        translated_plural: plural_text,
+        code: code,
+        status: "NEW",
+        timestamp: DateTime.utc_now() |> DateTime.to_iso8601()
+      }
 
-    {
-      %{
-        message
-        | msgstr: %{
-            0 => [singular_text],
-            1 => [plural_text]
-          }
-      },
-      changelog_entry
-    }
+      {
+        %{
+          message
+          | msgstr: %{
+              0 => [singular_text],
+              1 => [plural_text]
+            }
+        },
+        changelog_entry
+      }
+    else
+      {:error, reason} ->
+        Logger.error("Failed to translate plural message: #{inspect(reason)}")
+        fallback_singular = "[TRANSLATION_FAILED]"
+        fallback_plural = "[TRANSLATION_FAILED]"
+
+        changelog_entry = %{
+          type: :plural,
+          original_singular: value_singular,
+          original_plural: value_plural,
+          translated_singular: fallback_singular,
+          translated_plural: fallback_plural,
+          code: code,
+          status: "ERROR",
+          timestamp: DateTime.utc_now() |> DateTime.to_iso8601()
+        }
+
+        {
+          %{
+            message
+            | msgstr: %{
+                0 => [fallback_singular],
+                1 => [fallback_plural]
+              }
+          },
+          changelog_entry
+        }
+    end
   end
 
   defp translate_text(provider, text, code) do
@@ -157,116 +192,103 @@ defmodule GettextTranslator.Processor do
     })
   end
 
-  defp append_to_changelog(_, _, []) do
-    :ok
-  end
+  defp ensure_string(nil), do: ""
+  defp ensure_string(value) when is_binary(value), do: value
+  defp ensure_string(value), do: to_string(value)
+
+  defp append_to_changelog(_, _, []), do: :ok
 
   defp append_to_changelog(code, file_path, translations) do
-    # Get the application that is using the processor
     app = GettextTranslator.application()
-
-    # Use the PathHelper to get the proper path and ensure the directory exists
     PathHelper.ensure_changelog_dir(app)
-
-    # Use the PathHelper to get the changelog path
     changelog_file = PathHelper.changelog_path_for_po(file_path, app)
 
-    # Load existing content or create new structure
     existing_content =
       if File.exists?(changelog_file) do
         case File.read!(changelog_file) |> Jason.decode() do
           {:ok, content} -> content
-          {:error, _} -> %{"language" => code, "source_file" => file_path, "translations" => %{}}
+          {:error, _} -> base_changelog_structure(code, file_path)
         end
       else
-        %{"language" => code, "source_file" => file_path, "translations" => %{}}
+        base_changelog_structure(code, file_path)
       end
 
-    # Get existing translations map or create a new one
     existing_translations = Map.get(existing_content, "translations", %{})
+    updated_translations = merge_translations(translations, existing_translations)
 
-    # Format and merge new translations
-    updated_translations =
-      Enum.reduce(translations, existing_translations, fn translation, acc ->
-        # Extract the original message ID to use as the key
-        message_id =
-          case translation do
-            %{type: :singular, original: original} when is_list(original) ->
-              Enum.join(original, "")
-
-            %{type: :singular, original: original} when is_binary(original) ->
-              original
-
-            %{type: :plural, original_singular: singular} ->
-              singular
-
-            %{original: original} when is_list(original) ->
-              Enum.join(original, "")
-
-            %{original: original} when is_binary(original) ->
-              original
-
-            _ ->
-              ""
-          end
-
-        # Extract the translated text
-        translated_text =
-          case translation do
-            %{type: :singular, translated: text} ->
-              text
-
-            %{type: :plural, translated_singular: singular, translated_plural: plural} ->
-              "#{singular} | #{plural}"
-
-            %{translated: text} when is_binary(text) ->
-              text
-
-            _ ->
-              ""
-          end
-
-        # Skip if message_id is empty
-        if message_id == "" do
-          acc
-        else
-          # Only add if not already exists or if newer
-          case Map.get(acc, message_id) do
-            nil ->
-              # No existing entry, add new one
-              Map.put(acc, message_id, %{
-                "status" => "pending_review",
-                "text" => translated_text,
-                "last_updated" => translation.timestamp
-              })
-
-            existing ->
-              # If existing entry has timestamp, compare it
-              existing_timestamp = Map.get(existing, "last_updated", "1970-01-01T00:00:00Z")
-
-              if translation.timestamp > existing_timestamp do
-                # New translation is newer, update it
-                Map.put(acc, message_id, %{
-                  "status" => "pending_review",
-                  "text" => translated_text,
-                  "last_updated" => translation.timestamp
-                })
-              else
-                # Keep existing entry
-                acc
-              end
-          end
-        end
-      end)
-
-    # Update the content with merged translations
     updated_content = %{
       "language" => code,
       "source_file" => file_path,
       "translations" => updated_translations
     }
 
-    # Write the updated changelog
     File.write!(changelog_file, Jason.encode!(updated_content, pretty: true))
   end
+
+  defp base_changelog_structure(code, file_path) do
+    %{"language" => code, "source_file" => file_path, "translations" => %{}}
+  end
+
+  defp merge_translations(new_translations, existing_translations) do
+    Enum.reduce(new_translations, existing_translations, fn translation, acc ->
+      message_id = extract_message_id(translation)
+      translated_text = extract_translated_text(translation)
+
+      if message_id == "" do
+        acc
+      else
+        case Map.get(acc, message_id) do
+          nil ->
+            Map.put(acc, message_id, %{
+              "status" => "pending_review",
+              "text" => translated_text,
+              "last_updated" => translation.timestamp
+            })
+
+          existing ->
+            existing_timestamp = Map.get(existing, "last_updated", "1970-01-01T00:00:00Z")
+
+            if translation.timestamp > existing_timestamp do
+              Map.put(acc, message_id, %{
+                "status" => "pending_review",
+                "text" => translated_text,
+                "last_updated" => translation.timestamp
+              })
+            else
+              acc
+            end
+        end
+      end
+    end)
+  end
+
+  defp extract_message_id(%{type: :singular, original: original}) when is_list(original) do
+    Enum.join(original, "")
+  end
+
+  defp extract_message_id(%{type: :singular, original: original}) when is_binary(original) do
+    original
+  end
+
+  defp extract_message_id(%{type: :plural, original_singular: singular}), do: singular
+
+  defp extract_message_id(%{original: original}) when is_list(original) do
+    Enum.join(original, "")
+  end
+
+  defp extract_message_id(%{original: original}) when is_binary(original), do: original
+  defp extract_message_id(_), do: ""
+
+  defp extract_translated_text(%{type: :singular, translated: text}), do: text
+
+  defp extract_translated_text(%{
+         type: :plural,
+         translated_singular: singular,
+         translated_plural: plural
+       }) do
+    "#{singular} | #{plural}"
+  end
+
+  defp extract_translated_text(%{translated: text}) when is_binary(text), do: text
+  defp extract_translated_text(_), do: ""
 end
