@@ -67,7 +67,7 @@ defmodule GettextTranslator.MixProject do
   defp deps do
     [
       {:expo, "~> 1.1.0"},
-      {:langchain, "0.3.3"},
+      {:langchain, "~> 0.4.0"},
       # Dashboard dependencies (all optional)
       {:phoenix_live_dashboard, ">= 0.6.0", optional: true},
       {:phoenix_live_view, ">= 0.17.0", optional: true},

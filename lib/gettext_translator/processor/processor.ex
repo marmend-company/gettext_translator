@@ -9,6 +9,7 @@ defmodule GettextTranslator.Processor do
   alias Expo.PO
   alias GettextTranslator.Processor.LLM
   alias GettextTranslator.Util.PathHelper
+  alias LangChain.Message.ContentPart
 
   def run(%{language_code: code, files: files}, provider) do
     Logger.info("#{code}/#{lc_messages()} - starting processing")
@@ -194,6 +195,7 @@ defmodule GettextTranslator.Processor do
 
   defp ensure_string(nil), do: ""
   defp ensure_string(value) when is_binary(value), do: value
+  defp ensure_string(value) when is_list(value), do: ContentPart.parts_to_string(value) || ""
   defp ensure_string(value), do: to_string(value)
 
   defp append_to_changelog(_, _, []), do: :ok
