@@ -9,14 +9,17 @@ defmodule GettextTranslator.Processor.LLM do
   alias GettextTranslator.Processor.Translator
   alias LangChain.Chains.LLMChain
   alias LangChain.Message
+  alias LangChain.Message.ContentPart
 
   @spec translate(Translator.provider(), Translator.opts()) :: {:ok, String.t()} | {:error, any()}
   def translate(provider, %{language_code: code, message: message}) do
     configure_langchain(provider.endpoint.config)
 
     case create_translation_chain(provider, code, message) do
-      {:ok, result} ->
-        {:ok, result}
+      {:ok, %{last_message: %Message{content: content}}} ->
+        # In LangChain 0.4.0, content is a list of ContentPart structs
+        # Convert to string using ensure_string/1 helper
+        {:ok, ensure_string(content)}
 
       {:error, _, reason} ->
         Logger.error("Error while translating `#{message}` to `#{code}`: #{inspect(reason)}")
@@ -60,4 +63,10 @@ defmodule GettextTranslator.Processor.LLM do
     The message to be translated is <|input_start|>#{message}<|input_end|>
     """
   end
+
+  # Safely convert LLM response content to string
+  # Handles both LangChain 0.4.0 (list of ContentPart) and 0.3.3 (string) formats
+  defp ensure_string(value) when is_list(value), do: ContentPart.parts_to_string(value) || ""
+  defp ensure_string(value) when is_binary(value), do: value
+  defp ensure_string(_), do: ""
 end

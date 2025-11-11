@@ -92,11 +92,7 @@ defmodule GettextTranslator.Processor do
        ) do
     Logger.info("#{index}/#{count} - translating message `#{val}` to `#{code}` ")
 
-    {:ok, translated_value} = translate_text(provider, val, code)
-
-    translated_text =
-      translated_value.last_message.content
-      |> ensure_string()
+    {:ok, translated_text} = translate_text(provider, val, code)
 
     changelog_entry = %{
       type: :singular,
@@ -124,16 +120,8 @@ defmodule GettextTranslator.Processor do
       "#{index}/#{count} - translating plural message `#{value_singular}` / `#{value_plural}` to `#{code}` "
     )
 
-    with {:ok, translated_singular} <- translate_text(provider, value_singular, code),
-         {:ok, translated_plural} <- translate_text(provider, value_plural, code) do
-      singular_text =
-        translated_singular.last_message.content
-        |> ensure_string()
-
-      plural_text =
-        translated_plural.last_message.content
-        |> ensure_string()
-
+    with {:ok, singular_text} <- translate_text(provider, value_singular, code),
+         {:ok, plural_text} <- translate_text(provider, value_plural, code) do
       changelog_entry = %{
         type: :plural,
         original_singular: value_singular,
@@ -191,10 +179,6 @@ defmodule GettextTranslator.Processor do
       language_code: code
     })
   end
-
-  defp ensure_string(nil), do: ""
-  defp ensure_string(value) when is_binary(value), do: value
-  defp ensure_string(value), do: to_string(value)
 
   defp append_to_changelog(_, _, []), do: :ok
 
