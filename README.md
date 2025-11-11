@@ -47,7 +47,7 @@ Add `gettext_translator` to your dependencies in your `mix.exs`:
 ```elixir
 def deps do
   [
-    {:gettext_translator, "~> 0.4.5"}
+    {:gettext_translator, "~> 0.5.0"}
   ]
 end
 ```
@@ -90,6 +90,67 @@ config :gettext_translator, GettextTranslator,
   ignored_languages: ["en"]
 ```
 
+### Using Anthropic Claude
+
+```elixir
+config :gettext_translator, GettextTranslator,
+  endpoint: LangChain.ChatModels.ChatAnthropic,
+  endpoint_model: "claude-3-5-sonnet-20241022",
+  endpoint_temperature: 0,
+  endpoint_config: %{
+    "anthropic_key" => "YOUR_ANTHROPIC_API_KEY"
+  },
+  persona: "You are a professional translator. Your goal is to translate the message to the target language while preserving meaning and length.",
+  style: "Casual, using simple language",
+  ignored_languages: ["en"]
+```
+
+### Using Google Gemini
+
+```elixir
+config :gettext_translator, GettextTranslator,
+  endpoint: LangChain.ChatModels.ChatGoogleAI,
+  endpoint_model: "gemini-pro",
+  endpoint_temperature: 0,
+  endpoint_config: %{
+    "google_ai_key" => "YOUR_GOOGLE_AI_KEY"
+  },
+  persona: "You are a professional translator. Your goal is to translate the message to the target language while preserving meaning and length.",
+  style: "Casual, using simple language",
+  ignored_languages: ["en"]
+```
+
+### Using a Custom Remote LLM
+
+GettextTranslator supports any LLM provider compatible with LangChain 0.4.0. The library dynamically configures LangChain at runtime using the `endpoint_config` map. Configuration keys are automatically converted to LangChain application environment variables.
+
+For example, to use a custom OpenAI-compatible endpoint:
+
+```elixir
+config :gettext_translator, GettextTranslator,
+  endpoint: LangChain.ChatModels.ChatOpenAI,
+  endpoint_model: "your-custom-model",
+  endpoint_temperature: 0,
+  endpoint_config: %{
+    "openai_key" => "YOUR_API_KEY",
+    # Custom endpoint URL
+    "openai_endpoint" => "https://your-custom-endpoint.com/v1/chat/completions"
+  },
+  persona: "You are a professional translator. Your goal is to translate the message to the target language while preserving meaning and length.",
+  style: "Casual, using simple language",
+  ignored_languages: ["en"]
+```
+
+**Note:** As of LangChain 0.4.0, the following models are officially supported:
+- OpenAI ChatGPT
+- Anthropic Claude
+- Google Gemini
+- Google Vertex AI
+
+For other models, you may need to use GettextTranslator 0.4.5 (LangChain 0.3.3) or implement a custom adapter.
+
+**📘 For detailed information about custom endpoints, response formats, and adapter implementation, see [CUSTOM_ENDPOINTS.md](CUSTOM_ENDPOINTS.md)**
+
 ## Usage
 
 ### Running the Translator via CLI
@@ -119,7 +180,7 @@ GettextTranslator provides a web UI for managing translations through Phoenix Li
 ```elixir
 def deps do
   [
-    {:gettext_translator, "~> 0.4.5"},
+    {:gettext_translator, "~> 0.5.0"},
     {:phoenix_live_dashboard, ">= 0.6.0"},
     {:phoenix_live_view, ">= 0.17.0"}
   ]

@@ -4,7 +4,7 @@ defmodule GettextTranslator.MixProject do
   def project do
     [
       app: :gettext_translator,
-      version: "0.4.5",
+      version: "0.5.0",
       elixir: "~> 1.14",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
@@ -13,7 +13,14 @@ defmodule GettextTranslator.MixProject do
       package: package(),
       source_url: "https://github.com/marmend-company/gettext_translator",
       docs: [
-        extras: ["README.md", "CHANGELOG.md", "CONTRIBUTING.md"],
+        extras: [
+          "README.md",
+          "CHANGELOG.md",
+          "CONTRIBUTING.md",
+          "CONTRIBUTORS.md",
+          "CUSTOM_ENDPOINTS.md",
+          "LLM_GATEWAY_EXAMPLE.md"
+        ],
         main: "readme",
         groups_for_modules: [
           Core: [
@@ -60,14 +67,15 @@ defmodule GettextTranslator.MixProject do
       licenses: ["Apache-2.0"],
       links: %{"GitHub" => "https://github.com/marmend-company/gettext_translator"},
       maintainers: ["Max Panov"],
-      files: ~w(lib mix.exs README.md LICENSE CHANGELOG.md CONTRIBUTING.md)
+      files:
+        ~w(lib mix.exs README.md LICENSE CHANGELOG.md CONTRIBUTING.md CONTRIBUTORS.md CUSTOM_ENDPOINTS.md LLM_GATEWAY_EXAMPLE.md)
     ]
   end
 
   defp deps do
     [
       {:expo, "~> 1.1.0"},
-      {:langchain, "0.3.3"},
+      {:langchain, "~> 0.4.0"},
       # Dashboard dependencies (all optional)
       {:phoenix_live_dashboard, ">= 0.6.0", optional: true},
       {:phoenix_live_view, ">= 0.17.0", optional: true},

@@ -2,6 +2,64 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.0] - 2025-11-11
+
+### Breaking Changes
+
+**LangChain Upgrade: 0.3.3 → 0.4.0**
+
+This release upgrades the LangChain dependency from 0.3.3 to 0.4.0, which introduces breaking changes in how LLM responses are handled.
+
+#### What Changed
+
+- **Message Content Structure**: LangChain 0.4.0 returns message content as a list of `ContentPart` structs instead of plain strings
+  - Before: `%Message{content: "text response"}`
+  - After: `%Message{content: [%ContentPart{type: :text, content: "text response"}]}`
+  - The library now automatically converts this using `ContentPart.parts_to_string/1`
+
+#### Model Support Changes
+
+LangChain 0.4.0 officially supports only the following LLM providers:
+- ✅ **OpenAI ChatGPT** - Fully supported
+- ✅ **Anthropic Claude** - Fully supported
+- ✅ **Google Gemini** - Fully supported
+- ✅ **Google Vertex AI** - Fully supported
+- ❌ **Other models** - May not work with LangChain 0.4.0
+
+**Important**: If you're using ChatOllamaAI or other unsupported models, they may not function correctly with this version. We recommend:
+1. Testing your specific model after upgrading
+2. Using one of the officially supported providers
+3. Implementing a custom adapter if needed
+4. Staying on version 0.4.5 if you require unsupported models
+
+#### Migration Notes
+
+If you're upgrading from 0.4.5 to 0.5.0:
+
+1. **No configuration changes required** - Your existing configuration will continue to work
+2. **Test your LLM provider** - Verify translations work with your chosen provider
+3. **Check the updated README** - New examples added for Anthropic Claude, Google Gemini, and custom endpoints
+
+### Added
+
+- Support for Anthropic Claude via `LangChain.ChatModels.ChatAnthropic`
+- Support for Google Gemini via `LangChain.ChatModels.ChatGoogleAI`
+- Comprehensive documentation for custom remote LLM endpoints
+- Examples of sync and streaming response formats for custom endpoints
+
+### Changed
+
+- Updated LangChain dependency from 0.3.3 to ~> 0.4.0
+- Modified message content handling to support new ContentPart structure
+- Updated README with additional provider examples and custom endpoint configuration
+
+### Technical Details
+
+The `translate/2` function in `GettextTranslator.Processor.LLM` now:
+- Pattern matches on `{:ok, %{last_message: %Message{content: content}}}`
+- Converts ContentPart list to string using `ContentPart.parts_to_string/1`
+- Maintains backward compatibility with existing configurations
+
 ## [0.4.5] - 2025-09-03
 - Fixed bug regarding  nil values in the message strings that the Expo.PO.Composer can't handle.
 
