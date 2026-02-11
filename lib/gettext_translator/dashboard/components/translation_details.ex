@@ -5,6 +5,8 @@ defmodule GettextTranslator.Dashboard.Components.TranslationDetails do
   use Phoenix.Component
   import GettextTranslator.Util.Helper, only: [empty_string?: 1]
 
+  alias GettextTranslator.Dashboard.Components.TabNav
+
   attr(:viewing_language, :string, required: true)
   attr(:viewing_domain, :string, required: true)
   attr(:filtered_translations, :list, required: true)
@@ -12,6 +14,10 @@ defmodule GettextTranslator.Dashboard.Components.TranslationDetails do
   attr(:llm_translating, :boolean, default: false)
   attr(:llm_translation_result, :map, default: nil)
   attr(:llm_provider_info, :map, default: %{configured: false})
+  attr(:active_tab, :string, default: "all")
+  attr(:batch_translating, :boolean, default: false)
+  attr(:batch_progress, :integer, default: 0)
+  attr(:batch_total, :integer, default: 0)
 
   def render(assigns) do
     # Sort translations by changelog timestamp (newest first)
@@ -33,15 +39,33 @@ defmodule GettextTranslator.Dashboard.Components.TranslationDetails do
         {:desc, DateTime}
       )
 
+    pending_count = Enum.count(filtered_translations, &pending_translation?/1)
     assigns = assign(assigns, :filtered_translations, filtered_translations)
+    assigns = assign(assigns, :pending_count, pending_count)
 
     ~H"""
     <section id="translation-details" class="dashboard-card mt-4">
       <div class="card-title-container">
         <h5 class="card-title">{@viewing_language} / {@viewing_domain} Translations</h5>
-        <button type="button" phx-click="hide_translations" class="btn btn-link">
-          <i class="fa fa-times"></i> Close
-        </button>
+        <div style="display: flex; align-items: center; gap: 0.5rem;">
+          <%= if @llm_provider_info.configured do %>
+            <button
+              type="button"
+              class="btn btn-warning btn-sm"
+              phx-click="batch_translate_all"
+              disabled={@batch_translating}
+            >
+              <%= if @batch_translating do %>
+                Translating...
+              <% else %>
+                Batch Translate All Pending
+              <% end %>
+            </button>
+          <% end %>
+          <button type="button" phx-click="hide_translations" class="btn btn-link">
+            Close
+          </button>
+        </div>
       </div>
 
       <%= if @llm_provider_info.configured do %>
@@ -49,6 +73,23 @@ defmodule GettextTranslator.Dashboard.Components.TranslationDetails do
           <span class="llm-provider-label">LLM Provider:</span>
           <span class="llm-provider-value">
             {@llm_provider_info.adapter_name} — {@llm_provider_info.model}
+          </span>
+        </div>
+      <% end %>
+
+      <TabNav.render active_tab={@active_tab} pending_count={@pending_count} />
+
+      <%= if @batch_translating do %>
+        <div class="batch-progress-container">
+          <div class="batch-progress-bar-wrapper">
+            <div
+              class="batch-progress-bar"
+              style={"width: #{progress_percentage(@batch_progress, @batch_total)}%"}
+            >
+            </div>
+          </div>
+          <span class="batch-progress-text">
+            Translating {@batch_progress} of {@batch_total}...
           </span>
         </div>
       <% end %>
@@ -318,4 +359,11 @@ defmodule GettextTranslator.Dashboard.Components.TranslationDetails do
   end
 
   defp format_date(_), do: "-"
+
+  defp pending_translation?(%{status: :pending}), do: true
+  defp pending_translation?(%{changelog_status: "NEW"}), do: true
+  defp pending_translation?(_), do: false
+
+  defp progress_percentage(_progress, 0), do: 0
+  defp progress_percentage(progress, total), do: round(progress / total * 100)
 end

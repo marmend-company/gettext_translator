@@ -358,6 +358,168 @@ defmodule GettextTranslator.Dashboard.Components.GettextDashboardCSS do
       opacity: 0.65;
       cursor: not-allowed;
     }
+
+    /* Tab Navigation */
+    .tab-nav {
+      display: flex;
+      border-bottom: 2px solid #dee2e6;
+      margin-bottom: 1rem;
+    }
+
+    .tab-nav-item {
+      padding: 0.5rem 1rem;
+      border: none;
+      background: transparent;
+      color: #6c757d;
+      font-size: 0.875rem;
+      font-weight: 500;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -2px;
+      transition: color 0.15s, border-color 0.15s;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .tab-nav-item:hover {
+      color: #495057;
+    }
+
+    .tab-nav-item.active {
+      color: #3490dc;
+      border-bottom-color: #3490dc;
+    }
+
+    .tab-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 1.25rem;
+      height: 1.25rem;
+      padding: 0 0.375rem;
+      font-size: 0.7rem;
+      font-weight: 700;
+      line-height: 1;
+      color: #856404;
+      background-color: #ffc107;
+      border-radius: 10rem;
+    }
+
+    /* Batch Progress */
+    .batch-progress-container {
+      background-color: #e8f4fd;
+      padding: 0.75rem 1rem;
+      margin-bottom: 1rem;
+      border-radius: 0.25rem;
+      border: 1px solid #b8daff;
+    }
+
+    .batch-progress-bar-wrapper {
+      background-color: #dee2e6;
+      border-radius: 0.25rem;
+      overflow: hidden;
+      height: 0.75rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .batch-progress-bar {
+      background-color: #3490dc;
+      height: 100%;
+      transition: width 0.3s ease;
+      border-radius: 0.25rem;
+    }
+
+    .batch-progress-text {
+      color: #004085;
+      font-size: 0.8rem;
+      font-weight: 500;
+    }
+
+    /* Extract Button */
+    .btn-extract {
+      background-color: #6f42c1;
+      color: white;
+      border-color: #6f42c1;
+    }
+
+    .btn-extract:hover {
+      background-color: #5a32a3;
+      border-color: #5a32a3;
+    }
+
+    .btn-extract:disabled {
+      background-color: #6f42c1;
+      opacity: 0.65;
+      cursor: not-allowed;
+    }
+
+    /* LLM Override */
+    .llm-override-card {
+      border-left: 3px solid #3490dc;
+      padding: 0.75rem 1rem;
+      margin-bottom: 1rem;
+      background-color: #f8f9fa;
+      border-radius: 0 0.25rem 0.25rem 0;
+    }
+
+    .llm-override-header {
+      margin-bottom: 0.5rem;
+    }
+
+    .llm-override-active {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.5rem 0.75rem;
+      margin-bottom: 0.75rem;
+      background-color: #d4edda;
+      border: 1px solid #c3e6cb;
+      border-radius: 0.25rem;
+      font-size: 0.875rem;
+    }
+
+    .llm-override-active-label {
+      font-weight: 600;
+      color: #155724;
+    }
+
+    .llm-override-active-value {
+      color: #155724;
+    }
+
+    .llm-override-form {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .form-row {
+      display: flex;
+      gap: 1rem;
+    }
+
+    .form-select {
+      appearance: auto;
+    }
+
+    /* Batch Translate Button */
+    .btn-warning {
+      background-color: #ffc107;
+      color: #212529;
+      border-color: #ffc107;
+    }
+
+    .btn-warning:hover {
+      background-color: #e0a800;
+      border-color: #d39e00;
+    }
+
+    .btn-warning:disabled {
+      background-color: #ffc107;
+      opacity: 0.65;
+      cursor: not-allowed;
+    }
     """
   end
 end

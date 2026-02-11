@@ -14,12 +14,14 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
   require Logger
 
   alias GettextTranslator.Dashboard.Components.Header
+  alias GettextTranslator.Dashboard.Components.LLMOverrideForm
   alias GettextTranslator.Dashboard.Components.TranslationDetails
   alias GettextTranslator.Dashboard.Components.TranslationStats
   alias GettextTranslator.Processor.LLM
   alias GettextTranslator.Store
   alias GettextTranslator.Store.Changelog
   alias GettextTranslator.Store.Translation
+  alias GettextTranslator.Util.Extractor
   alias GettextTranslator.Util.MakePullRequest
   alias GettextTranslator.Util.Parser
 
@@ -52,14 +54,20 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
        translations_loaded: false,
        translations_count: 0,
        gettext_path: nil,
-       translations_count: 0,
-       translations_loaded0: false,
        loading: false,
        modified_count: modified_count,
        approved_count: approved_count,
        llm_translating: false,
        llm_translation_result: nil,
-       llm_provider_info: Parser.provider_info()
+       llm_provider_info: Parser.provider_info(),
+       active_tab: "all",
+       extracting: false,
+       batch_translating: false,
+       batch_progress: 0,
+       batch_total: 0,
+       llm_override: nil,
+       show_override_form: false,
+       base_filtered_translations: []
      )}
   end
 
@@ -105,9 +113,16 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
           modified_count={@modified_count}
           approved_count={@approved_count}
           loading={@loading}
+          extracting={@extracting}
         />
 
         <%= if @translations_loaded do %>
+          <LLMOverrideForm.render
+            llm_override={@llm_override}
+            llm_provider_info={@llm_provider_info}
+            show_override_form={@show_override_form}
+          />
+
           <TranslationStats.render translations={@translations} />
 
           <%= if assigns[:viewing_translations] do %>
@@ -119,6 +134,10 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
               llm_translating={@llm_translating}
               llm_translation_result={@llm_translation_result}
               llm_provider_info={@llm_provider_info}
+              active_tab={@active_tab}
+              batch_translating={@batch_translating}
+              batch_progress={@batch_progress}
+              batch_total={@batch_total}
             />
           <% end %>
         <% end %>
@@ -138,17 +157,20 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
     translations = Store.list_translations()
 
     # Filter translations by language and domain
-    filtered_translations =
+    base_filtered =
       Enum.filter(translations, fn t ->
         t.language_code == language && t.domain == domain
       end)
+
+    filtered = apply_tab_filter(base_filtered, socket.assigns.active_tab)
 
     socket =
       socket
       |> assign(viewing_translations: true)
       |> assign(viewing_language: language)
       |> assign(viewing_domain: domain)
-      |> assign(filtered_translations: filtered_translations)
+      |> assign(base_filtered_translations: base_filtered)
+      |> assign(filtered_translations: filtered)
 
     {:noreply, socket}
   end
@@ -159,7 +181,9 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
       socket
       |> assign(viewing_translations: false)
       |> assign(filtered_translations: [])
+      |> assign(base_filtered_translations: [])
       |> assign(editing_id: nil)
+      |> assign(active_tab: "all")
 
     {:noreply, socket}
   end
@@ -189,7 +213,7 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
 
       case Store.get_translation(id) do
         {:ok, translation} ->
-          provider = Parser.parse_provider()
+          provider = resolve_provider(socket.assigns.llm_override)
 
           opts = %{
             language_code: translation.language_code,
@@ -237,18 +261,21 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
       {:ok, updated} ->
         updated = Changelog.update_for_modified_translation(updated, params)
 
-        # Update filtered_translations in socket assigns
-        filtered_translations =
-          Enum.map(socket.assigns.filtered_translations, fn t ->
+        # Update both base and tab-filtered translations
+        base_filtered =
+          Enum.map(socket.assigns.base_filtered_translations, fn t ->
             if t.id == id, do: updated, else: t
           end)
+
+        filtered = apply_tab_filter(base_filtered, socket.assigns.active_tab)
 
         # Get the new count of modified translations
         modified_count = Store.count_modified_translations()
 
         {:noreply,
          socket
-         |> assign(filtered_translations: filtered_translations)
+         |> assign(base_filtered_translations: base_filtered)
+         |> assign(filtered_translations: filtered)
          |> assign(editing_id: nil)
          |> assign(modified_count: modified_count)
          |> put_flash(:info, "Translation updated")}
@@ -368,11 +395,13 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
     # Use the Translation service to update the translation
     case Translation.update_translation(id, %{status: :translated}) do
       {:ok, updated} ->
-        # Update the filtered_translations in socket assigns
-        filtered_translations =
-          Enum.map(socket.assigns.filtered_translations, fn t ->
+        # Update both base and tab-filtered translations
+        base_filtered =
+          Enum.map(socket.assigns.base_filtered_translations, fn t ->
             if t.id == id, do: updated, else: t
           end)
+
+        filtered = apply_tab_filter(base_filtered, socket.assigns.active_tab)
 
         # Increment the approved counter
         Store.increment_approved()
@@ -382,7 +411,8 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
 
         socket =
           socket
-          |> assign(filtered_translations: filtered_translations)
+          |> assign(base_filtered_translations: base_filtered)
+          |> assign(filtered_translations: filtered)
           |> assign(loading: false)
           |> assign(approved_count: approved_count)
           |> put_flash(:info, "Translation approved")
@@ -395,6 +425,194 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
          |> assign(loading: false)
          |> put_flash(:error, "Failed to approve: #{inspect(reason)}")}
     end
+  end
+
+  @impl true
+  def handle_event("switch_tab", %{"tab" => tab}, socket) do
+    filtered = apply_tab_filter(socket.assigns.base_filtered_translations, tab)
+    {:noreply, assign(socket, active_tab: tab, filtered_translations: filtered)}
+  end
+
+  @impl true
+  def handle_event("extract_and_merge", _params, socket) do
+    self_pid = self()
+    gettext_path = socket.assigns.gettext_path
+
+    Task.start(fn ->
+      result = Extractor.extract_and_merge(gettext_path)
+      send(self_pid, {:extraction_result, result})
+    end)
+
+    {:noreply, assign(socket, extracting: true)}
+  end
+
+  @impl true
+  def handle_event("batch_translate_all", _params, socket) do
+    provider_info = socket.assigns.llm_provider_info
+
+    if provider_info.configured do
+      # Collect pending translations from current view
+      pending =
+        socket.assigns.base_filtered_translations
+        |> Enum.filter(&pending_translation?/1)
+
+      if Enum.empty?(pending) do
+        {:noreply, put_flash(socket, :info, "No pending translations to batch translate")}
+      else
+        self_pid = self()
+        llm_override = socket.assigns.llm_override
+
+        Task.start(fn ->
+          provider = resolve_provider(llm_override)
+
+          Enum.each(pending, fn translation ->
+            opts = %{
+              language_code: translation.language_code,
+              message: translation.message_id,
+              type: translation.type,
+              plural_message: Map.get(translation, :plural_id)
+            }
+
+            result =
+              try do
+                LLM.translate_single(provider, opts)
+              rescue
+                e -> {:error, Exception.message(e)}
+              end
+
+            send(self_pid, {:batch_translate_progress, translation.id, result})
+          end)
+
+          send(self_pid, {:batch_translate_complete})
+        end)
+
+        {:noreply,
+         assign(socket,
+           batch_translating: true,
+           batch_progress: 0,
+           batch_total: length(pending)
+         )}
+      end
+    else
+      {:noreply, put_flash(socket, :error, "LLM provider is not configured")}
+    end
+  end
+
+  @impl true
+  def handle_event("update_llm_override", params, socket) do
+    adapter_name = Map.get(params, "adapter", "openai")
+    model = Map.get(params, "model", "")
+    api_key = Map.get(params, "api_key", "")
+    endpoint_url = Map.get(params, "endpoint_url", "")
+
+    {adapter_module, config_key, display_name} = adapter_info(adapter_name)
+
+    endpoint_config =
+      %{}
+      |> maybe_put_config(config_key, api_key)
+      |> maybe_put_endpoint_url(adapter_name, endpoint_url)
+
+    override = %{
+      adapter: adapter_module,
+      adapter_name: display_name,
+      model: model,
+      config: endpoint_config
+    }
+
+    provider_info = %{configured: true, adapter_name: display_name, model: model}
+
+    {:noreply,
+     socket
+     |> assign(llm_override: override)
+     |> assign(llm_provider_info: provider_info)
+     |> assign(show_override_form: false)
+     |> put_flash(:info, "LLM provider override applied: #{display_name} — #{model}")}
+  end
+
+  @impl true
+  def handle_event("clear_llm_override", _params, socket) do
+    {:noreply,
+     socket
+     |> assign(llm_override: nil)
+     |> assign(llm_provider_info: Parser.provider_info())
+     |> put_flash(:info, "LLM provider override cleared")}
+  end
+
+  @impl true
+  def handle_event("toggle_llm_override_form", _params, socket) do
+    {:noreply, assign(socket, show_override_form: !socket.assigns.show_override_form)}
+  end
+
+  @impl true
+  def handle_info({:extraction_result, result}, socket) do
+    case result do
+      {:ok, message} ->
+        updated_socket = reload_translations(socket)
+
+        {:noreply,
+         updated_socket
+         |> assign(extracting: false)
+         |> put_flash(:info, message)}
+
+      {:error, reason} ->
+        {:noreply,
+         socket
+         |> assign(extracting: false)
+         |> put_flash(:error, "Extraction failed: #{inspect(reason)}")}
+    end
+  end
+
+  @impl true
+  def handle_info({:batch_translate_progress, id, result}, socket) do
+    progress = socket.assigns.batch_progress + 1
+
+    socket =
+      case result do
+        {:ok, %{translation: translation_text} = translation_result} ->
+          updates = %{
+            translation: translation_text,
+            plural_translation: Map.get(translation_result, :plural_translation),
+            status: :translated
+          }
+
+          case Translation.update_translation(id, updates) do
+            {:ok, updated} ->
+              base_filtered =
+                Enum.map(socket.assigns.base_filtered_translations, fn t ->
+                  if t.id == id, do: updated, else: t
+                end)
+
+              filtered = apply_tab_filter(base_filtered, socket.assigns.active_tab)
+
+              socket
+              |> assign(base_filtered_translations: base_filtered)
+              |> assign(filtered_translations: filtered)
+
+            {:error, _reason} ->
+              socket
+          end
+
+        {:error, _reason} ->
+          socket
+      end
+
+    {:noreply, assign(socket, batch_progress: progress)}
+  end
+
+  @impl true
+  def handle_info({:batch_translate_complete}, socket) do
+    modified_count = Store.count_modified_translations()
+    approved_count = Store.count_approved_translations()
+
+    {:noreply,
+     socket
+     |> assign(batch_translating: false)
+     |> assign(modified_count: modified_count)
+     |> assign(approved_count: approved_count)
+     |> put_flash(
+       :info,
+       "Batch translation complete: #{socket.assigns.batch_progress} of #{socket.assigns.batch_total} translated"
+     )}
   end
 
   @impl true
@@ -497,4 +715,60 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
       updates
     end
   end
+
+  defp apply_tab_filter(translations, "new") do
+    Enum.filter(translations, &pending_translation?/1)
+  end
+
+  defp apply_tab_filter(translations, _tab), do: translations
+
+  defp pending_translation?(%{status: :pending}), do: true
+  defp pending_translation?(%{changelog_status: "NEW"}), do: true
+  defp pending_translation?(_), do: false
+
+  defp resolve_provider(nil), do: Parser.parse_provider()
+
+  defp resolve_provider(override) do
+    config = Application.get_env(:gettext_translator, GettextTranslator, [])
+
+    %{
+      endpoint: %{
+        adapter: override.adapter,
+        model: override.model,
+        temperature: Keyword.get(config, :endpoint_temperature, 0.3),
+        config: override.config
+      },
+      persona:
+        Keyword.get(
+          config,
+          :persona,
+          "You are a proffesional translator. Your goal is to translate the message to the target language and try to keep the same meaning and length of the output sentence as original one."
+        ),
+      style: Keyword.get(config, :style, "Casual, use simple language"),
+      ignored_languages: Keyword.get(config, :ignored_languages, [])
+    }
+  end
+
+  defp adapter_info("openai"),
+    do: {LangChain.ChatModels.ChatOpenAI, "openai_key", "OpenAI"}
+
+  defp adapter_info("anthropic"),
+    do: {LangChain.ChatModels.ChatAnthropic, "anthropic_key", "Anthropic"}
+
+  defp adapter_info("ollama"),
+    do: {LangChain.ChatModels.ChatOllamaAI, nil, "Ollama"}
+
+  defp adapter_info("google_ai"),
+    do: {LangChain.ChatModels.ChatGoogleAI, "google_ai_key", "Google AI"}
+
+  defp adapter_info(_),
+    do: {LangChain.ChatModels.ChatOpenAI, "openai_key", "OpenAI"}
+
+  defp maybe_put_config(config, nil, _api_key), do: config
+  defp maybe_put_config(config, _key, ""), do: config
+  defp maybe_put_config(config, key, api_key), do: Map.put(config, key, api_key)
+
+  defp maybe_put_endpoint_url(config, _adapter, ""), do: config
+  defp maybe_put_endpoint_url(config, "ollama", url), do: Map.put(config, "endpoint", url)
+  defp maybe_put_endpoint_url(config, _adapter, url), do: Map.put(config, "endpoint", url)
 end

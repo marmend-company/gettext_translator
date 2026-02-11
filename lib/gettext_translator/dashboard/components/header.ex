@@ -10,6 +10,7 @@ defmodule GettextTranslator.Dashboard.Components.Header do
   attr(:modified_count, :integer, default: 0)
   attr(:approved_count, :integer, default: 0)
   attr(:loading, :boolean, default: false)
+  attr(:extracting, :boolean, default: false)
 
   def render(assigns) do
     ~H"""
@@ -46,6 +47,18 @@ defmodule GettextTranslator.Dashboard.Components.Header do
           </form>
 
           <%= if @translations_loaded do %>
+            <button
+              type="button"
+              class="btn btn-extract"
+              phx-click="extract_and_merge"
+              disabled={@extracting}
+            >
+              <%= if @extracting do %>
+                Extracting...
+              <% else %>
+                Extract & Merge
+              <% end %>
+            </button>
             <form phx-submit="save_to_files" phx-change="noop">
               <button
                 phx-click="save_to_files"
