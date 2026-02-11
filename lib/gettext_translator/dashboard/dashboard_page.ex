@@ -16,10 +16,12 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
   alias GettextTranslator.Dashboard.Components.Header
   alias GettextTranslator.Dashboard.Components.TranslationDetails
   alias GettextTranslator.Dashboard.Components.TranslationStats
+  alias GettextTranslator.Processor.LLM
   alias GettextTranslator.Store
   alias GettextTranslator.Store.Changelog
   alias GettextTranslator.Store.Translation
   alias GettextTranslator.Util.MakePullRequest
+  alias GettextTranslator.Util.Parser
 
   @impl true
   def init(opts) do
@@ -54,7 +56,10 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
        translations_loaded0: false,
        loading: false,
        modified_count: modified_count,
-       approved_count: approved_count
+       approved_count: approved_count,
+       llm_translating: false,
+       llm_translation_result: nil,
+       llm_provider_info: Parser.provider_info()
      )}
   end
 
@@ -111,6 +116,9 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
               viewing_domain={@viewing_domain}
               filtered_translations={@filtered_translations}
               editing_id={assigns[:editing_id]}
+              llm_translating={@llm_translating}
+              llm_translation_result={@llm_translation_result}
+              llm_provider_info={@llm_provider_info}
             />
           <% end %>
         <% end %>
@@ -158,12 +166,57 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
 
   @impl true
   def handle_event("edit_translation", %{"id" => id}, socket) do
-    {:noreply, assign(socket, editing_id: id)}
+    {:noreply,
+     assign(socket,
+       editing_id: id,
+       llm_translating: false,
+       llm_translation_result: nil
+     )}
   end
 
   @impl true
   def handle_event("cancel_edit", _params, socket) do
     {:noreply, assign(socket, editing_id: nil)}
+  end
+
+  @impl true
+  def handle_event("llm_translate", %{"_id" => id} = params, socket) do
+    provider_info = socket.assigns.llm_provider_info
+
+    if provider_info.configured do
+      self_pid = self()
+      additional_instructions = Map.get(params, "additional_instructions", "")
+
+      case Store.get_translation(id) do
+        {:ok, translation} ->
+          provider = Parser.parse_provider()
+
+          opts = %{
+            language_code: translation.language_code,
+            message: translation.message_id,
+            type: translation.type,
+            plural_message: Map.get(translation, :plural_id)
+          }
+
+          Task.start(fn ->
+            result =
+              try do
+                LLM.translate_single(provider, opts, additional_instructions)
+              rescue
+                e -> {:error, Exception.message(e)}
+              end
+
+            send(self_pid, {:llm_translation_result, id, result})
+          end)
+
+          {:noreply, assign(socket, llm_translating: true)}
+
+        {:error, _reason} ->
+          {:noreply, put_flash(socket, :error, "Translation not found")}
+      end
+    else
+      {:noreply, put_flash(socket, :error, "LLM provider is not configured")}
+    end
   end
 
   @impl true
@@ -341,6 +394,24 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
          socket
          |> assign(loading: false)
          |> put_flash(:error, "Failed to approve: #{inspect(reason)}")}
+    end
+  end
+
+  @impl true
+  def handle_info({:llm_translation_result, id, result}, socket) do
+    case result do
+      {:ok, translation_result} ->
+        {:noreply,
+         socket
+         |> assign(llm_translating: false)
+         |> assign(llm_translation_result: Map.put(translation_result, :id, id))
+         |> put_flash(:info, "LLM translation ready — review and save")}
+
+      {:error, reason} ->
+        {:noreply,
+         socket
+         |> assign(llm_translating: false)
+         |> put_flash(:error, "LLM translation failed: #{inspect(reason)}")}
     end
   end
 

@@ -7,6 +7,27 @@ defmodule GettextTranslator.Util.Parser do
   @default_style "Casual, use simple language"
   @default_persona "You are a proffesional translator. Your goal is to translate the message to the target language and try to keep the same meaning and length of the output sentence as original one."
 
+  @doc """
+  Returns a summary of the configured LLM provider for display in the dashboard.
+
+  Returns `%{configured: true, adapter_name: "ChatOpenAI", model: "gpt-4"}` when
+  configured, or `%{configured: false}` otherwise.
+  """
+  @spec provider_info() ::
+          %{configured: boolean(), adapter_name: String.t(), model: String.t()}
+          | %{configured: false}
+  def provider_info do
+    config = Application.get_env(:gettext_translator, GettextTranslator, [])
+
+    with {:ok, adapter} <- Keyword.fetch(config, :endpoint),
+         {:ok, model} <- Keyword.fetch(config, :endpoint_model) do
+      adapter_name = adapter |> Module.split() |> List.last()
+      %{configured: true, adapter_name: adapter_name, model: model}
+    else
+      _ -> %{configured: false}
+    end
+  end
+
   def parse_provider do
     config = Application.fetch_env!(:gettext_translator, GettextTranslator)
 

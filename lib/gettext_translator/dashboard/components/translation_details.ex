@@ -9,6 +9,9 @@ defmodule GettextTranslator.Dashboard.Components.TranslationDetails do
   attr(:viewing_domain, :string, required: true)
   attr(:filtered_translations, :list, required: true)
   attr(:editing_id, :string, default: nil)
+  attr(:llm_translating, :boolean, default: false)
+  attr(:llm_translation_result, :map, default: nil)
+  attr(:llm_provider_info, :map, default: %{configured: false})
 
   def render(assigns) do
     # Sort translations by changelog timestamp (newest first)
@@ -40,6 +43,15 @@ defmodule GettextTranslator.Dashboard.Components.TranslationDetails do
           <i class="fa fa-times"></i> Close
         </button>
       </div>
+
+      <%= if @llm_provider_info.configured do %>
+        <div class="llm-provider-info">
+          <span class="llm-provider-label">LLM Provider:</span>
+          <span class="llm-provider-value">
+            {@llm_provider_info.adapter_name} — {@llm_provider_info.model}
+          </span>
+        </div>
+      <% end %>
 
       <div class="card-info">
         <div class="dashboard-table-container">
@@ -74,7 +86,12 @@ defmodule GettextTranslator.Dashboard.Components.TranslationDetails do
 
                   <%= if @editing_id == t.id do %>
                     <td colspan="3" class="p-2">
-                      <.translation_edit_form translation={t} />
+                      <.translation_edit_form
+                        translation={t}
+                        llm_translating={@llm_translating}
+                        llm_translation_result={@llm_translation_result}
+                        llm_provider_info={@llm_provider_info}
+                      />
                     </td>
                   <% else %>
                     <td style="vertical-align: middle; padding: 12px 0 12px 8px; text-align: left;">
@@ -161,33 +178,69 @@ defmodule GettextTranslator.Dashboard.Components.TranslationDetails do
   end
 
   attr(:translation, :map, required: true)
+  attr(:llm_translating, :boolean, default: false)
+  attr(:llm_translation_result, :map, default: nil)
+  attr(:llm_provider_info, :map, default: %{configured: false})
 
   def translation_edit_form(assigns) do
+    translation_value =
+      llm_or_existing_translation(assigns.llm_translation_result, assigns.translation)
+
+    plural_value = llm_or_existing_plural(assigns.llm_translation_result, assigns.translation)
+    assigns = assign(assigns, translation_value: translation_value, plural_value: plural_value)
+
     ~H"""
-    <form phx-submit="save_translation" class="translation-form">
-      <input type="hidden" name="_id" value={@translation.id} />
-      <div class="form-group">
-        <label class="form-label">Translation</label>
-        <textarea name="translation" rows="2" class="form-control"><%= @translation.translation || "" %></textarea>
-      </div>
-
-      <%= if @translation.type == :plural do %>
-        <div class="form-group mt-2">
-          <label class="form-label">Plural Translation</label>
-          <textarea name="plural_translation" rows="2" class="form-control"><%= @translation.plural_translation || "" %></textarea>
+    <div class="translation-edit-container">
+      <form phx-submit="save_translation" class="translation-form">
+        <input type="hidden" name="_id" value={@translation.id} />
+        <div class="form-group">
+          <label class="form-label">Translation</label>
+          <textarea name="translation" rows="2" class="form-control"><%= @translation_value %></textarea>
         </div>
+
+        <%= if @translation.type == :plural do %>
+          <div class="form-group mt-2">
+            <label class="form-label">Plural Translation</label>
+            <textarea name="plural_translation" rows="2" class="form-control"><%= @plural_value %></textarea>
+          </div>
+        <% end %>
+
+        <div class="form-actions">
+          <button type="button" phx-click="cancel_edit" class="btn btn-secondary btn-sm">
+            Cancel
+          </button>
+
+          <button type="submit" class="btn btn-primary btn-sm">
+            Save
+          </button>
+        </div>
+      </form>
+
+      <%= if @llm_provider_info.configured do %>
+        <form phx-submit="llm_translate" class="llm-translate-form">
+          <input type="hidden" name="_id" value={@translation.id} />
+          <div class="form-group">
+            <label class="form-label">Additional LLM Instructions (optional)</label>
+            <textarea
+              name="additional_instructions"
+              rows="2"
+              class="form-control"
+              placeholder="e.g. keep it formal, this is a button label, use informal tone..."
+            ></textarea>
+          </div>
+
+          <div class="form-actions">
+            <button type="submit" class="btn btn-info btn-sm" disabled={@llm_translating}>
+              <%= if @llm_translating do %>
+                Translating...
+              <% else %>
+                LLM Translate
+              <% end %>
+            </button>
+          </div>
+        </form>
       <% end %>
-
-      <div class="form-actions">
-        <button type="button" phx-click="cancel_edit" class="btn btn-secondary btn-sm">
-          Cancel
-        </button>
-
-        <button type="submit" class="btn btn-primary btn-sm">
-          Save
-        </button>
-      </div>
-    </form>
+    </div>
     """
   end
 
@@ -236,6 +289,22 @@ defmodule GettextTranslator.Dashboard.Components.TranslationDetails do
       {@status}
     </span>
     """
+  end
+
+  defp llm_or_existing_translation(%{id: id, translation: llm_translation}, %{id: id}) do
+    llm_translation || ""
+  end
+
+  defp llm_or_existing_translation(_llm_result, translation) do
+    translation.translation || ""
+  end
+
+  defp llm_or_existing_plural(%{id: id, plural_translation: llm_plural}, %{id: id}) do
+    llm_plural || ""
+  end
+
+  defp llm_or_existing_plural(_llm_result, translation) do
+    Map.get(translation, :plural_translation) || ""
   end
 
   defp format_date(timestamp) when is_binary(timestamp) do

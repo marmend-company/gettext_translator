@@ -306,6 +306,58 @@ defmodule GettextTranslator.Dashboard.Components.GettextDashboardCSS do
     .mt-1 {
       margin-top: 0.25rem;
     }
+
+    /* LLM Provider Info */
+    .llm-provider-info {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem 0.75rem;
+      margin-bottom: 1rem;
+      background-color: #e8f4fd;
+      border: 1px solid #b8daff;
+      border-radius: 0.25rem;
+      font-size: 0.875rem;
+    }
+
+    .llm-provider-label {
+      font-weight: 600;
+      color: #004085;
+    }
+
+    .llm-provider-value {
+      color: #004085;
+    }
+
+    /* LLM Translate Form */
+    .translation-edit-container {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .llm-translate-form {
+      border-top: 1px solid #dee2e6;
+      padding-top: 0.75rem;
+    }
+
+    /* Info button style */
+    .btn-info {
+      background-color: #17a2b8;
+      color: white;
+      border-color: #17a2b8;
+    }
+
+    .btn-info:hover {
+      background-color: #138496;
+      border-color: #117a8b;
+    }
+
+    .btn-info:disabled {
+      background-color: #17a2b8;
+      opacity: 0.65;
+      cursor: not-allowed;
+    }
     """
   end
 end
