@@ -17,6 +17,7 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
   alias GettextTranslator.Dashboard.Components.Header
   alias GettextTranslator.Dashboard.Components.LLMOverrideForm
   alias GettextTranslator.Dashboard.Components.TabNav
+  alias GettextTranslator.Dashboard.Components.TranslatedStats
   alias GettextTranslator.Dashboard.Components.TranslationDetails
   alias GettextTranslator.Dashboard.Components.TranslationStats
   alias GettextTranslator.Processor.LLM
@@ -31,38 +32,39 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
   def init(opts) do
     Logger.info("DashboardPage init received opts: #{inspect(opts)}")
 
-    # Store the raw configs without resolving paths
     gettext_path = Keyword.get(opts, :gettext_path)
     application = Keyword.get(opts, :application)
 
-    # Ensure the table exists
-    ensure_config_table()
+    # Store in persistent_term (process-independent, survives ETS table loss)
+    if gettext_path,
+      do: :persistent_term.put({:gettext_translator, :raw_gettext_path}, gettext_path)
 
-    # Store raw configs in ETS
+    if application,
+      do: :persistent_term.put({:gettext_translator, :application}, application)
+
+    # Also store in ETS for backward compatibility
+    ensure_config_table()
     store_config(:raw_gettext_path, gettext_path)
     store_config(:application, application)
 
-    # Also persist in Application env (survives ETS table recreation on recompile)
-    if gettext_path,
-      do: Application.put_env(:gettext_translator, :dashboard_gettext_path, gettext_path)
-
-    if application,
-      do: Application.put_env(:gettext_translator, :dashboard_application, application)
-
-    {:ok, %{}}
+    # Pass config through session so mount always has it
+    {:ok, %{raw_gettext_path: gettext_path, application: application}}
   end
 
   @impl true
-  def mount(_params, _session, socket) do
+  def mount(_params, session, socket) do
     modified_count = Store.count_modified_translations()
     approved_count = Store.count_approved_translations()
-    # Just assign socket without loading translations
+
+    # Resolve gettext_path: session from init (primary) -> persistent_term (fallback)
+    gettext_path = resolve_gettext_path(session)
+
     {:ok,
      assign(socket,
        translations: [],
        translations_loaded: false,
        translations_count: 0,
-       gettext_path: nil,
+       gettext_path: gettext_path,
        loading: false,
        modified_count: modified_count,
        approved_count: approved_count,
@@ -75,7 +77,8 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
        batch_progress: 0,
        batch_total: 0,
        llm_override: nil,
-       show_override_form: false
+       show_override_form: false,
+       batch_translated_ids: MapSet.new()
      )}
   end
 
@@ -102,12 +105,19 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
       translations_count = length(translations)
       translations_loaded = translations_count > 0
 
+      # Compute translated entries from batch_translated_ids
+      batch_ids = assigns[:batch_translated_ids] || MapSet.new()
+
+      translated_entries =
+        Enum.filter(translations, fn t -> MapSet.member?(batch_ids, t.id) end)
+
       # Ensure gettext_path is assigned
       assigns =
         assigns
         |> assign(translations_count: translations_count)
         |> assign(translations_loaded: translations_loaded)
         |> assign(translations: translations)
+        |> assign(translated_entries: translated_entries)
 
       ~H"""
       <style>
@@ -134,18 +144,24 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
           <TabNav.render
             active_tab={@active_tab}
             extracted_count={Enum.count(@translations, fn t -> t.status == :pending end)}
+            translated_count={length(@translated_entries)}
           />
 
-          <%= if @active_tab == "stats" do %>
-            <TranslationStats.render translations={@translations} />
-          <% else %>
-            <ExtractedStats.render
-              translations={@translations}
-              llm_provider_info={@llm_provider_info}
-              batch_translating={@batch_translating}
-              batch_progress={@batch_progress}
-              batch_total={@batch_total}
-            />
+          <%= cond do %>
+            <% @active_tab == "stats" -> %>
+              <TranslationStats.render translations={@translations} />
+            <% @active_tab == "extracted" -> %>
+              <ExtractedStats.render
+                translations={@translations}
+                llm_provider_info={@llm_provider_info}
+                batch_translating={@batch_translating}
+                batch_progress={@batch_progress}
+                batch_total={@batch_total}
+              />
+            <% @active_tab == "translated" -> %>
+              <TranslatedStats.render translated_entries={@translated_entries} />
+            <% true -> %>
+              <TranslationStats.render translations={@translations} />
           <% end %>
 
           <%= if assigns[:viewing_translations] do %>
@@ -198,6 +214,27 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
     filtered =
       Enum.filter(translations, fn t ->
         t.language_code == language && t.domain == domain && t.status == :pending
+      end)
+
+    socket =
+      socket
+      |> assign(viewing_translations: true)
+      |> assign(viewing_language: language)
+      |> assign(viewing_domain: domain)
+      |> assign(filtered_translations: filtered)
+
+    {:noreply, socket}
+  end
+
+  @impl true
+  def handle_event("show_translated", %{"language" => language, "domain" => domain}, socket) do
+    translations = Store.list_translations()
+    batch_ids = socket.assigns.batch_translated_ids
+
+    # Show only batch-translated entries for this language/domain
+    filtered =
+      Enum.filter(translations, fn t ->
+        t.language_code == language && t.domain == domain && MapSet.member?(batch_ids, t.id)
       end)
 
     socket =
@@ -605,8 +642,12 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
           }
 
           case Translation.update_translation(id, updates) do
-            {:ok, _updated} -> socket
-            {:error, _reason} -> socket
+            {:ok, _updated} ->
+              batch_ids = MapSet.put(socket.assigns.batch_translated_ids, id)
+              assign(socket, batch_translated_ids: batch_ids)
+
+            {:error, _reason} ->
+              socket
           end
 
         {:error, _reason} ->
@@ -621,9 +662,18 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
     modified_count = Store.count_modified_translations()
     approved_count = Store.count_approved_translations()
 
+    # Auto-switch to "translated" tab if any translations were done
+    active_tab =
+      if MapSet.size(socket.assigns.batch_translated_ids) > 0,
+        do: "translated",
+        else: socket.assigns.active_tab
+
     {:noreply,
      socket
      |> assign(batch_translating: false)
+     |> assign(active_tab: active_tab)
+     |> assign(viewing_translations: false)
+     |> assign(filtered_translations: [])
      |> assign(modified_count: modified_count)
      |> assign(approved_count: approved_count)
      |> put_flash(
@@ -656,34 +706,10 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
   end
 
   defp reload_translations(socket) do
-    # Resolve the path at runtime when button is clicked
-    # Try ETS first, fall back to Application env (persists across ETS table recreation)
-    app =
-      get_config(:application) ||
-        Application.get_env(:gettext_translator, :dashboard_application)
-
-    raw_path =
-      get_config(:raw_gettext_path) ||
-        Application.get_env(:gettext_translator, :dashboard_gettext_path)
-
     gettext_path =
-      cond do
-        app && raw_path ->
-          # Resolve path at runtime using application dir
-          resolved_path = Application.app_dir(app, raw_path)
-          store_config(:gettext_path, resolved_path)
-          Logger.info("Resolved gettext path: #{resolved_path}")
-          resolved_path
+      socket.assigns.gettext_path || resolve_gettext_path()
 
-        raw_path ->
-          # No application configured, use raw path directly (dev mode)
-          store_config(:gettext_path, raw_path)
-          Logger.info("Using raw gettext path: #{raw_path}")
-          raw_path
-
-        true ->
-          get_config(:gettext_path)
-      end
+    Logger.info("reload_translations using path: #{inspect(gettext_path)}")
 
     if gettext_path do
       # Ensure the TranslationStore is started
@@ -789,4 +815,25 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
   defp maybe_put_endpoint_url(config, _adapter, ""), do: config
   defp maybe_put_endpoint_url(config, "ollama", url), do: Map.put(config, "endpoint", url)
   defp maybe_put_endpoint_url(config, _adapter, url), do: Map.put(config, "endpoint", url)
+
+  defp resolve_gettext_path(session \\ %{}) do
+    # Try session first (from init), then persistent_term as fallback
+    app = Map.get(session, :application) || persistent_get(:application)
+    raw_path = Map.get(session, :raw_gettext_path) || persistent_get(:raw_gettext_path)
+
+    cond do
+      app && raw_path ->
+        Application.app_dir(app, raw_path)
+
+      raw_path ->
+        raw_path
+
+      true ->
+        nil
+    end
+  end
+
+  defp persistent_get(key) do
+    :persistent_term.get({:gettext_translator, key}, nil)
+  end
 end

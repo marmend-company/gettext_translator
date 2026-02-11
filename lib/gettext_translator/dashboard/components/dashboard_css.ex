@@ -411,6 +411,11 @@ defmodule GettextTranslator.Dashboard.Components.GettextDashboardCSS do
       color: white;
     }
 
+    .tab-badge-translated {
+      background-color: #28a745;
+      color: white;
+    }
+
     /* Batch Progress */
     .batch-progress-container {
       background-color: #e8f4fd;
