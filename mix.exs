@@ -4,7 +4,7 @@ defmodule GettextTranslator.MixProject do
   def project do
     [
       app: :gettext_translator,
-      version: "0.5.0",
+      version: "0.6.0",
       elixir: "~> 1.14",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
@@ -75,7 +75,7 @@ defmodule GettextTranslator.MixProject do
   defp deps do
     [
       {:expo, "~> 1.1.0"},
-      {:langchain, "~> 0.4.0"},
+      {:langchain, "~> 0.5.0"},
       # Dashboard dependencies (all optional)
       {:phoenix_live_dashboard, ">= 0.6.0", optional: true},
       {:phoenix_live_view, ">= 0.17.0", optional: true},
