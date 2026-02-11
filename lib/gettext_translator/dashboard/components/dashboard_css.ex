@@ -406,6 +406,11 @@ defmodule GettextTranslator.Dashboard.Components.GettextDashboardCSS do
       border-radius: 10rem;
     }
 
+    .tab-badge-pending {
+      background-color: #dc3545;
+      color: white;
+    }
+
     /* Batch Progress */
     .batch-progress-container {
       background-color: #e8f4fd;

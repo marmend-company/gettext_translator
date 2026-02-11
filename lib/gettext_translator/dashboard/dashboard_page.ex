@@ -451,10 +451,11 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
     provider_info = socket.assigns.llm_provider_info
 
     if provider_info.configured do
-      # Collect pending translations from current view
+      # Collect extracted (pending) translations from current view
       pending =
-        socket.assigns.base_filtered_translations
-        |> Enum.filter(&pending_translation?/1)
+        Enum.filter(socket.assigns.base_filtered_translations, fn t ->
+          t.status == :pending
+        end)
 
       if Enum.empty?(pending) do
         {:noreply, put_flash(socket, :info, "No pending translations to batch translate")}
@@ -717,14 +718,14 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
   end
 
   defp apply_tab_filter(translations, "new") do
-    Enum.filter(translations, &pending_translation?/1)
+    Enum.filter(translations, fn t -> t.changelog_status == "NEW" end)
+  end
+
+  defp apply_tab_filter(translations, "extracted") do
+    Enum.filter(translations, fn t -> t.status == :pending end)
   end
 
   defp apply_tab_filter(translations, _tab), do: translations
-
-  defp pending_translation?(%{status: :pending}), do: true
-  defp pending_translation?(%{changelog_status: "NEW"}), do: true
-  defp pending_translation?(_), do: false
 
   defp resolve_provider(nil), do: Parser.parse_provider()
 

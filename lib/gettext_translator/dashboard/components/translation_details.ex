@@ -39,9 +39,11 @@ defmodule GettextTranslator.Dashboard.Components.TranslationDetails do
         {:desc, DateTime}
       )
 
-    pending_count = Enum.count(filtered_translations, &pending_translation?/1)
+    new_count = Enum.count(filtered_translations, &new_translation?/1)
+    extracted_count = Enum.count(filtered_translations, &extracted_translation?/1)
     assigns = assign(assigns, :filtered_translations, filtered_translations)
-    assigns = assign(assigns, :pending_count, pending_count)
+    assigns = assign(assigns, :new_count, new_count)
+    assigns = assign(assigns, :extracted_count, extracted_count)
 
     ~H"""
     <section id="translation-details" class="dashboard-card mt-4">
@@ -77,7 +79,11 @@ defmodule GettextTranslator.Dashboard.Components.TranslationDetails do
         </div>
       <% end %>
 
-      <TabNav.render active_tab={@active_tab} pending_count={@pending_count} />
+      <TabNav.render
+        active_tab={@active_tab}
+        new_count={@new_count}
+        extracted_count={@extracted_count}
+      />
 
       <%= if @batch_translating do %>
         <div class="batch-progress-container">
@@ -360,9 +366,11 @@ defmodule GettextTranslator.Dashboard.Components.TranslationDetails do
 
   defp format_date(_), do: "-"
 
-  defp pending_translation?(%{status: :pending}), do: true
-  defp pending_translation?(%{changelog_status: "NEW"}), do: true
-  defp pending_translation?(_), do: false
+  defp new_translation?(%{changelog_status: "NEW"}), do: true
+  defp new_translation?(_), do: false
+
+  defp extracted_translation?(%{status: :pending}), do: true
+  defp extracted_translation?(_), do: false
 
   defp progress_percentage(_progress, 0), do: 0
   defp progress_percentage(progress, total), do: round(progress / total * 100)
