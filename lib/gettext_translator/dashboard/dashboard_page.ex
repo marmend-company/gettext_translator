@@ -13,8 +13,10 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
 
   require Logger
 
+  alias GettextTranslator.Dashboard.Components.ExtractedStats
   alias GettextTranslator.Dashboard.Components.Header
   alias GettextTranslator.Dashboard.Components.LLMOverrideForm
+  alias GettextTranslator.Dashboard.Components.TabNav
   alias GettextTranslator.Dashboard.Components.TranslationDetails
   alias GettextTranslator.Dashboard.Components.TranslationStats
   alias GettextTranslator.Processor.LLM
@@ -36,9 +38,16 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
     # Ensure the table exists
     ensure_config_table()
 
-    # Store raw configs
+    # Store raw configs in ETS
     store_config(:raw_gettext_path, gettext_path)
     store_config(:application, application)
+
+    # Also persist in Application env (survives ETS table recreation on recompile)
+    if gettext_path,
+      do: Application.put_env(:gettext_translator, :dashboard_gettext_path, gettext_path)
+
+    if application,
+      do: Application.put_env(:gettext_translator, :dashboard_application, application)
 
     {:ok, %{}}
   end
@@ -60,14 +69,13 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
        llm_translating: false,
        llm_translation_result: nil,
        llm_provider_info: Parser.provider_info(),
-       active_tab: "all",
+       active_tab: "stats",
        extracting: false,
        batch_translating: false,
        batch_progress: 0,
        batch_total: 0,
        llm_override: nil,
-       show_override_form: false,
-       base_filtered_translations: []
+       show_override_form: false
      )}
   end
 
@@ -123,7 +131,22 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
             show_override_form={@show_override_form}
           />
 
-          <TranslationStats.render translations={@translations} />
+          <TabNav.render
+            active_tab={@active_tab}
+            extracted_count={Enum.count(@translations, fn t -> t.status == :pending end)}
+          />
+
+          <%= if @active_tab == "stats" do %>
+            <TranslationStats.render translations={@translations} />
+          <% else %>
+            <ExtractedStats.render
+              translations={@translations}
+              llm_provider_info={@llm_provider_info}
+              batch_translating={@batch_translating}
+              batch_progress={@batch_progress}
+              batch_total={@batch_total}
+            />
+          <% end %>
 
           <%= if assigns[:viewing_translations] do %>
             <TranslationDetails.render
@@ -134,10 +157,6 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
               llm_translating={@llm_translating}
               llm_translation_result={@llm_translation_result}
               llm_provider_info={@llm_provider_info}
-              active_tab={@active_tab}
-              batch_translating={@batch_translating}
-              batch_progress={@batch_progress}
-              batch_total={@batch_total}
             />
           <% end %>
         <% end %>
@@ -156,20 +175,36 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
   def handle_event("show_translations", %{"language" => language, "domain" => domain}, socket) do
     translations = Store.list_translations()
 
-    # Filter translations by language and domain
-    base_filtered =
+    filtered =
       Enum.filter(translations, fn t ->
         t.language_code == language && t.domain == domain
       end)
-
-    filtered = apply_tab_filter(base_filtered, socket.assigns.active_tab)
 
     socket =
       socket
       |> assign(viewing_translations: true)
       |> assign(viewing_language: language)
       |> assign(viewing_domain: domain)
-      |> assign(base_filtered_translations: base_filtered)
+      |> assign(filtered_translations: filtered)
+
+    {:noreply, socket}
+  end
+
+  @impl true
+  def handle_event("show_extracted", %{"language" => language, "domain" => domain}, socket) do
+    translations = Store.list_translations()
+
+    # Show only pending translations for this language/domain
+    filtered =
+      Enum.filter(translations, fn t ->
+        t.language_code == language && t.domain == domain && t.status == :pending
+      end)
+
+    socket =
+      socket
+      |> assign(viewing_translations: true)
+      |> assign(viewing_language: language)
+      |> assign(viewing_domain: domain)
       |> assign(filtered_translations: filtered)
 
     {:noreply, socket}
@@ -181,9 +216,7 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
       socket
       |> assign(viewing_translations: false)
       |> assign(filtered_translations: [])
-      |> assign(base_filtered_translations: [])
       |> assign(editing_id: nil)
-      |> assign(active_tab: "all")
 
     {:noreply, socket}
   end
@@ -261,20 +294,15 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
       {:ok, updated} ->
         updated = Changelog.update_for_modified_translation(updated, params)
 
-        # Update both base and tab-filtered translations
-        base_filtered =
-          Enum.map(socket.assigns.base_filtered_translations, fn t ->
+        filtered =
+          Enum.map(socket.assigns.filtered_translations, fn t ->
             if t.id == id, do: updated, else: t
           end)
 
-        filtered = apply_tab_filter(base_filtered, socket.assigns.active_tab)
-
-        # Get the new count of modified translations
         modified_count = Store.count_modified_translations()
 
         {:noreply,
          socket
-         |> assign(base_filtered_translations: base_filtered)
          |> assign(filtered_translations: filtered)
          |> assign(editing_id: nil)
          |> assign(modified_count: modified_count)
@@ -395,23 +423,16 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
     # Use the Translation service to update the translation
     case Translation.update_translation(id, %{status: :translated}) do
       {:ok, updated} ->
-        # Update both base and tab-filtered translations
-        base_filtered =
-          Enum.map(socket.assigns.base_filtered_translations, fn t ->
+        filtered =
+          Enum.map(socket.assigns.filtered_translations, fn t ->
             if t.id == id, do: updated, else: t
           end)
 
-        filtered = apply_tab_filter(base_filtered, socket.assigns.active_tab)
-
-        # Increment the approved counter
         Store.increment_approved()
-
-        # Get both counters
         approved_count = Store.count_approved_translations()
 
         socket =
           socket
-          |> assign(base_filtered_translations: base_filtered)
           |> assign(filtered_translations: filtered)
           |> assign(loading: false)
           |> assign(approved_count: approved_count)
@@ -429,8 +450,13 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
 
   @impl true
   def handle_event("switch_tab", %{"tab" => tab}, socket) do
-    filtered = apply_tab_filter(socket.assigns.base_filtered_translations, tab)
-    {:noreply, assign(socket, active_tab: tab, filtered_translations: filtered)}
+    # Close any open detail view when switching tabs
+    {:noreply,
+     socket
+     |> assign(active_tab: tab)
+     |> assign(viewing_translations: false)
+     |> assign(filtered_translations: [])
+     |> assign(editing_id: nil)}
   end
 
   @impl true
@@ -451,11 +477,10 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
     provider_info = socket.assigns.llm_provider_info
 
     if provider_info.configured do
-      # Collect extracted (pending) translations from current view
+      # Collect all pending translations
       pending =
-        Enum.filter(socket.assigns.base_filtered_translations, fn t ->
-          t.status == :pending
-        end)
+        Store.list_translations()
+        |> Enum.filter(fn t -> t.status == :pending end)
 
       if Enum.empty?(pending) do
         {:noreply, put_flash(socket, :info, "No pending translations to batch translate")}
@@ -553,6 +578,9 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
         {:noreply,
          updated_socket
          |> assign(extracting: false)
+         |> assign(active_tab: "extracted")
+         |> assign(viewing_translations: false)
+         |> assign(filtered_translations: [])
          |> put_flash(:info, message)}
 
       {:error, reason} ->
@@ -577,20 +605,8 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
           }
 
           case Translation.update_translation(id, updates) do
-            {:ok, updated} ->
-              base_filtered =
-                Enum.map(socket.assigns.base_filtered_translations, fn t ->
-                  if t.id == id, do: updated, else: t
-                end)
-
-              filtered = apply_tab_filter(base_filtered, socket.assigns.active_tab)
-
-              socket
-              |> assign(base_filtered_translations: base_filtered)
-              |> assign(filtered_translations: filtered)
-
-            {:error, _reason} ->
-              socket
+            {:ok, _updated} -> socket
+            {:error, _reason} -> socket
           end
 
         {:error, _reason} ->
@@ -641,21 +657,32 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
 
   defp reload_translations(socket) do
     # Resolve the path at runtime when button is clicked
-    app = get_config(:application)
-    raw_path = get_config(:raw_gettext_path)
+    # Try ETS first, fall back to Application env (persists across ETS table recreation)
+    app =
+      get_config(:application) ||
+        Application.get_env(:gettext_translator, :dashboard_application)
+
+    raw_path =
+      get_config(:raw_gettext_path) ||
+        Application.get_env(:gettext_translator, :dashboard_gettext_path)
 
     gettext_path =
-      if app && raw_path do
-        # Resolve path at runtime
-        resolved_path = Application.app_dir(app, raw_path)
+      cond do
+        app && raw_path ->
+          # Resolve path at runtime using application dir
+          resolved_path = Application.app_dir(app, raw_path)
+          store_config(:gettext_path, resolved_path)
+          Logger.info("Resolved gettext path: #{resolved_path}")
+          resolved_path
 
-        # Store the resolved path for future use
-        store_config(:gettext_path, resolved_path)
+        raw_path ->
+          # No application configured, use raw path directly (dev mode)
+          store_config(:gettext_path, raw_path)
+          Logger.info("Using raw gettext path: #{raw_path}")
+          raw_path
 
-        Logger.info("Resolved gettext path: #{resolved_path}")
-        resolved_path
-      else
-        get_config(:gettext_path)
+        true ->
+          get_config(:gettext_path)
       end
 
     if gettext_path do
@@ -716,16 +743,6 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
       updates
     end
   end
-
-  defp apply_tab_filter(translations, "new") do
-    Enum.filter(translations, fn t -> t.changelog_status == "NEW" end)
-  end
-
-  defp apply_tab_filter(translations, "extracted") do
-    Enum.filter(translations, fn t -> t.status == :pending end)
-  end
-
-  defp apply_tab_filter(translations, _tab), do: translations
 
   defp resolve_provider(nil), do: Parser.parse_provider()
 

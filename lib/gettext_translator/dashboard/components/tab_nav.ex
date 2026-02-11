@@ -1,11 +1,11 @@
 defmodule GettextTranslator.Dashboard.Components.TabNav do
   @moduledoc """
-  Tab navigation component for switching between All, New, and Extracted translations.
+  Top-level tab navigation for the dashboard page.
+  Switches between Translation Stats overview and New Extracted translations.
   """
   use Phoenix.Component
 
   attr(:active_tab, :string, required: true)
-  attr(:new_count, :integer, required: true)
   attr(:extracted_count, :integer, required: true)
 
   def render(assigns) do
@@ -13,22 +13,11 @@ defmodule GettextTranslator.Dashboard.Components.TabNav do
     <div class="tab-nav">
       <button
         type="button"
-        class={"tab-nav-item #{if @active_tab == "all", do: "active", else: ""}"}
+        class={"tab-nav-item #{if @active_tab == "stats", do: "active", else: ""}"}
         phx-click="switch_tab"
-        phx-value-tab="all"
+        phx-value-tab="stats"
       >
-        All Translations
-      </button>
-      <button
-        type="button"
-        class={"tab-nav-item #{if @active_tab == "new", do: "active", else: ""}"}
-        phx-click="switch_tab"
-        phx-value-tab="new"
-      >
-        New Translations
-        <%= if @new_count > 0 do %>
-          <span class="tab-badge">{@new_count}</span>
-        <% end %>
+        Translation Stats
       </button>
       <button
         type="button"
