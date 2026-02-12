@@ -15,7 +15,7 @@ jobs:
       matrix:
         include:
           - os: ubuntu-24.04
-            erlang: "28.0"
+            erlang: "28.1"
             elixir: "1.19"
             lint: true
             coverage: true
