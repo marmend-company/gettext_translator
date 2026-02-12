@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.0] - 2026-02-11
+
+### Added
+
+- **Dashboard Tab Navigation** — Page-level tabs separating Translation Stats, New Extracted, and New Translated views for a streamlined workflow
+- **Extract & Merge from Dashboard** — Run `mix gettext.extract --merge --no-fuzzy` directly from the dashboard UI; automatically switches to the New Extracted tab to show newly discovered strings
+- **Batch Translate All Pending** — Translate every pending entry in a single click with real-time progress bar tracking; uses sequential processing to respect LLM API rate limits
+- **New Translated Review Tab** — After batch translation, a dedicated tab appears showing all translations from the current session grouped by language and domain, allowing review, editing, and approval before saving
+- **LLM Provider Override** — Session-scoped form to switch AI adapter (OpenAI, Anthropic, Ollama, Google AI), model, API key, and endpoint URL without modifying config files
+- **Extractor Module** — New `GettextTranslator.Util.Extractor` for dev/prod-aware extraction (System.cmd in dev, Expo-based merge in releases)
+
+### Changed
+
+- Dashboard UI restructured from flat view to tab-based navigation
+- Improved session-based config passing between `init` and `mount` for reliable path resolution across LiveDashboard page loads
+- Updated README with full dashboard workflow documentation and screenshots
+
+### Fixed
+
+- Fixed `gettext_path` being nil on page reload by passing config through the LiveDashboard session instead of relying solely on ETS/persistent_term
+
 ## [0.5.0] - 2025-11-11
 
 ### Breaking Changes

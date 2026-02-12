@@ -16,27 +16,59 @@ Hack to fix it, run you `mix gettext.extract` one more time after translations a
 - **Customizable Configurations:** Define your own translation persona, style, and languages to ignore.
 - **CLI Integration:** Translate Gettext files directly from the command line.
 - **Seamless Gettext Integration:** Automatically translate files in your Gettext directory.
-- **Live Dashboard:** 
-- Monitor and manage translations through Phoenix LiveDashboard.
-- Detailed view of all translations with filtering and pagination
-- Direct editing of translations in the LiveView
-- Approval workflow for LLM based translations
-- Saving changes back to PO files
+- **Live Dashboard:**
+  - Monitor and manage translations through Phoenix LiveDashboard
+  - Tab-based navigation: Translation Stats, New Extracted, and New Translated views
+  - **Extract & Merge** from the dashboard — run `mix gettext.extract --merge` without leaving the browser
+  - **Batch Translate** all pending entries with a single click, with real-time progress tracking
+  - **LLM Provider Override** — switch AI provider/model per session without changing config files
+  - Review, edit, and approve translations with a dedicated post-translation review tab
+  - Direct editing of translations with inline LLM translation assistance
+  - Save changes back to PO files or create Git PRs directly
 - **Production Ready:** Works in both development and release environments with proper path handling.
 - **Pluralization Support:** Properly handles language-specific plural forms (including Ukrainian with three forms).
 
-#### Upcoming Dashboard Features
-In upcoming releases, the full dashboard UI will include:
-- Git integration for creating commits and PRs
+## Dashboard Workflow
 
+The dashboard provides a complete translation management workflow — from extracting new strings, through LLM-powered batch translation, to reviewing and approving results — all without leaving the browser.
 
-## Example
+### Step 1: Translation Stats Overview
+
+After loading translations, the **Translation Stats** tab shows a summary of all languages and domains with counts, pending items, and changelog status.
+
+![Translation Stats overview](examples/image-2.png)
+
+### Step 2: Override LLM Provider (Optional)
+
+Click **Override LLM Provider** to switch the AI provider for the current session without changing your config files. Select an adapter (OpenAI, Anthropic, Ollama, Google AI), enter the model name, API key, and optionally a custom endpoint URL.
+
+![LLM Override form](examples/image-3.png)
+
+### Step 3: Extract & Merge New Translations
+
+Click **Extract & Merge** to run `mix gettext.extract --merge` from the dashboard. The dashboard automatically switches to the **New Extracted** tab, showing newly discovered translation strings grouped by language and domain.
+
+![New Extracted tab with pending translations](examples/image-4.png)
+
+### Step 4: Batch Translate All Pending
+
+Click **Batch Translate All Pending** to send every pending entry to your configured LLM provider. A progress bar tracks the translation in real-time.
+
+![Batch translation in progress](examples/image-5.png)
+
+### Step 5: Review New Translations
+
+After batch translation completes, the **New Translated** tab appears automatically. It shows all translations created during this session, grouped by language and domain. From here you can drill into individual entries to review, edit, or approve them before saving to files.
+
+![New Translated tab for review](examples/image-6.png)
+
+### Additional Dashboard Views
 
 #### List all translations in the dashboard:
 
 ![all translations](examples/image.png)
 
-#### View translations in the dashboard:
+#### View and edit individual translations:
 
 ![view translation](examples/image-1.png)
 
@@ -47,7 +79,7 @@ Add `gettext_translator` to your dependencies in your `mix.exs`:
 ```elixir
 def deps do
   [
-    {:gettext_translator, "~> 0.5.0"}
+    {:gettext_translator, "~> 0.6.0"}
   ]
 end
 ```
@@ -168,10 +200,8 @@ If your Gettext files are located in a different directory, specify the path:
 mix gettext_translator.run path/to/your/gettext
 ```
 
-### Phoenix LiveDashboard Integration (Preview)
-GettextTranslator provides a web UI for managing translations through Phoenix LiveDashboard.
-
-> **Note:** The full dashboard UI is under active development. The current version provides a basic view and API access to translations.
+### Phoenix LiveDashboard Integration
+GettextTranslator provides a full web UI for managing translations through Phoenix LiveDashboard. See the [Dashboard Workflow](#dashboard-workflow) section above for a visual walkthrough.
 
 #### Setup Dashboard Integration
 
@@ -180,7 +210,7 @@ GettextTranslator provides a web UI for managing translations through Phoenix Li
 ```elixir
 def deps do
   [
-    {:gettext_translator, "~> 0.5.0"},
+    {:gettext_translator, "~> 0.6.0"},
     {:phoenix_live_dashboard, ">= 0.6.0"},
     {:phoenix_live_view, ">= 0.17.0"}
   ]
