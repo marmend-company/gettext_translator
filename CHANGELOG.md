@@ -2,6 +2,39 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.0] - 2026-02-28
+
+### Breaking Changes
+
+**LangChain Upgrade: 0.5.x → 0.6.0**
+
+This release upgrades the LangChain dependency from ~> 0.5.0 to ~> 0.6.0, which includes new features and breaking changes upstream.
+
+#### Upstream Breaking Changes (LangChain 0.6.0)
+
+- **DeepResearch Source Migration** — Inline `Source` struct replaced with unified `Citation`/`CitationSource` structs
+- **Perplexity Response Format** — Content now returns as `ContentPart` structs instead of plain strings
+- **Google AI Grounding Metadata** — Raw metadata moved to `message.metadata["grounding_metadata"]`
+
+> **Note**: These upstream changes do not affect the core translation workflow of this library, as it does not use DeepResearch, Perplexity, or Google AI grounding features directly.
+
+#### New Upstream Features Available
+
+- **Citations Support** — Unified citation abstraction across all providers (Anthropic, OpenAI, Google AI, Perplexity)
+- **Customizable Run Modes** — Composable execution modes (`WhileNeedsResponse`, `UntilSuccess`, `Step`, `UntilToolUsed`)
+- **Streaming Reasoning Callbacks** — `on_llm_reasoning_delta` for Azure OpenAI reasoning summaries
+
+### Added
+
+- **Quick Prompt Buttons** — Locale-aware translation action buttons (Regenerate, Short Version, Rephrase, Synonyms) in the translation details panel
+- **PromptTemplates Module** — New `GettextTranslator.Dashboard.PromptTemplates` module with per-locale prompt templates for 7 languages (English, Ukrainian, Spanish, German, Polish, French, Portuguese)
+- **Quick Translate Event** — New `llm_quick_translate` LiveView event handler for executing prompt-based translation actions
+
+### Changed
+
+- Renamed "LLM Translate" button to "GPT" for brevity
+- Updated LangChain dependency from ~> 0.5.0 to ~> 0.6.0
+
 ## [0.6.0] - 2026-02-11
 
 ### Added
