@@ -229,12 +229,27 @@ defmodule GettextTranslator.Dashboard.Components.TranslationDetails do
             ></textarea>
           </div>
 
-          <div class="form-actions">
+          <div
+            class="form-actions"
+            style="display: flex; flex-wrap: wrap; gap: 6px; align-items: center;"
+          >
+            <%= for action <- GettextTranslator.Dashboard.PromptTemplates.actions() do %>
+              <button
+                type="button"
+                phx-click="llm_quick_translate"
+                phx-value-id={@translation.id}
+                phx-value-action={action}
+                class="btn btn-outline-secondary btn-sm"
+                disabled={@llm_translating}
+              >
+                {GettextTranslator.Dashboard.PromptTemplates.action_label(action)}
+              </button>
+            <% end %>
             <button type="submit" class="btn btn-info btn-sm" disabled={@llm_translating}>
               <%= if @llm_translating do %>
                 Translating...
               <% else %>
-                LLM Translate
+                GPT
               <% end %>
             </button>
           </div>

@@ -20,6 +20,7 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
   alias GettextTranslator.Dashboard.Components.TranslatedStats
   alias GettextTranslator.Dashboard.Components.TranslationDetails
   alias GettextTranslator.Dashboard.Components.TranslationStats
+  alias GettextTranslator.Dashboard.PromptTemplates
   alias GettextTranslator.Processor.LLM
   alias GettextTranslator.Store
   alias GettextTranslator.Store.Changelog
@@ -296,6 +297,47 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
             result =
               try do
                 LLM.translate_single(provider, opts, additional_instructions)
+              rescue
+                e -> {:error, Exception.message(e)}
+              end
+
+            send(self_pid, {:llm_translation_result, id, result})
+          end)
+
+          {:noreply, assign(socket, llm_translating: true)}
+
+        {:error, _reason} ->
+          {:noreply, put_flash(socket, :error, "Translation not found")}
+      end
+    else
+      {:noreply, put_flash(socket, :error, "LLM provider is not configured")}
+    end
+  end
+
+  @impl true
+  def handle_event("llm_quick_translate", %{"id" => id, "action" => action_str}, socket) do
+    provider_info = socket.assigns.llm_provider_info
+
+    if provider_info.configured do
+      self_pid = self()
+      action = String.to_existing_atom(action_str)
+
+      case Store.get_translation(id) do
+        {:ok, translation} ->
+          provider = resolve_provider(socket.assigns.llm_override)
+          prompt = PromptTemplates.get_prompt(action, translation.language_code)
+
+          opts = %{
+            language_code: translation.language_code,
+            message: translation.message_id,
+            type: translation.type,
+            plural_message: Map.get(translation, :plural_id)
+          }
+
+          Task.start(fn ->
+            result =
+              try do
+                LLM.translate_single(provider, opts, prompt)
               rescue
                 e -> {:error, Exception.message(e)}
               end
