@@ -7,6 +7,7 @@ defmodule GettextTranslator.Processor.LLM do
   @behaviour GettextTranslator.Processor.Translator
 
   alias GettextTranslator.Processor.Translator
+  alias GettextTranslator.Util.LanguageNames
   alias LangChain.Chains.LLMChain
   alias LangChain.Message
   alias LangChain.Message.ContentPart
@@ -96,14 +97,38 @@ defmodule GettextTranslator.Processor.LLM do
         temperature: provider.endpoint.temperature
       })
 
-    messages = [
-      Message.new_system!("#{provider.persona}. Your translation style is #{provider.style}"),
-      Message.new_user!(build_translation_prompt(message, code, additional_instructions))
-    ]
+    messages =
+      if translategemma?(provider.endpoint.model) do
+        source_lang = Map.get(provider, :source_language, "en")
+        [Message.new_user!(build_translategemma_prompt(message, source_lang, code))]
+      else
+        [
+          Message.new_system!("#{provider.persona}. Your translation style is #{provider.style}"),
+          Message.new_user!(build_translation_prompt(message, code, additional_instructions))
+        ]
+      end
 
     LLMChain.new!(%{llm: llm})
     |> LLMChain.add_messages(messages)
     |> LLMChain.run()
+  end
+
+  @doc """
+  Checks if the given model name is a TranslateGemma model.
+
+  ## Examples
+
+      iex> GettextTranslator.Processor.LLM.translategemma?("translategemma-27b")
+      true
+
+      iex> GettextTranslator.Processor.LLM.translategemma?("gpt-4")
+      false
+  """
+  @spec translategemma?(String.t()) :: boolean()
+  def translategemma?(model_name) do
+    model_name
+    |> String.downcase()
+    |> String.contains?("translategemma")
   end
 
   defp build_translation_prompt(message, code, additional_instructions) do
@@ -119,6 +144,41 @@ defmodule GettextTranslator.Processor.LLM do
     else
       base
     end
+  end
+
+  @doc """
+  Builds a TranslateGemma-formatted prompt for translation.
+
+  TranslateGemma expects a single user message with a specific structure:
+  professional translator persona, followed by two blank lines before the text.
+
+  ## Parameters
+
+    - `message` - The text to translate
+    - `source_code` - POSIX code of the source language (e.g., "en")
+    - `target_code` - POSIX code of the target language (e.g., "es")
+
+  ## Examples
+
+      iex> GettextTranslator.Processor.LLM.build_translategemma_prompt("Hello", "en", "es")
+      "You are a professional English (en) to Spanish (es) translator. " <>
+      "Your goal is to accurately convey the meaning and nuances of the original English text " <>
+      "while adhering to Spanish grammar, vocabulary, and cultural sensitivities.\\n" <>
+      "Produce only the Spanish translation, without any additional explanations or commentary. " <>
+      "Please translate the following English text into Spanish:\\n\\n\\nHello"
+  """
+  @spec build_translategemma_prompt(String.t(), String.t(), String.t()) :: String.t()
+  def build_translategemma_prompt(message, source_code, target_code) do
+    source_name = LanguageNames.language_name(source_code)
+    target_name = LanguageNames.language_name(target_code)
+    source_iso = LanguageNames.iso_code(source_code)
+    target_iso = LanguageNames.iso_code(target_code)
+
+    "You are a professional #{source_name} (#{source_iso}) to #{target_name} (#{target_iso}) translator. " <>
+      "Your goal is to accurately convey the meaning and nuances of the original #{source_name} text " <>
+      "while adhering to #{target_name} grammar, vocabulary, and cultural sensitivities.\n" <>
+      "Produce only the #{target_name} translation, without any additional explanations or commentary. " <>
+      "Please translate the following #{source_name} text into #{target_name}:\n\n\n#{message}"
   end
 
   # Safely convert LLM response content to string

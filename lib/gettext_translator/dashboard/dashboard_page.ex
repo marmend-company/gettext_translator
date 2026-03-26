@@ -831,6 +831,7 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
           "You are a proffesional translator. Your goal is to translate the message to the target language and try to keep the same meaning and length of the output sentence as original one."
         ),
       style: Keyword.get(config, :style, "Casual, use simple language"),
+      source_language: Keyword.get(config, :source_language, "en"),
       ignored_languages: Keyword.get(config, :ignored_languages, [])
     }
   end

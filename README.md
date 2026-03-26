@@ -79,7 +79,7 @@ Add `gettext_translator` to your dependencies in your `mix.exs`:
 ```elixir
 def deps do
   [
-    {:gettext_translator, "~> 0.6.0"}
+    {:gettext_translator, "~> 0.8.0"}
   ]
 end
 ```
@@ -152,6 +152,36 @@ config :gettext_translator, GettextTranslator,
   ignored_languages: ["en"]
 ```
 
+### Using TranslateGemma
+
+[TranslateGemma](https://ai.google.dev/gemma/docs/translategemma) is a collection of open translation models built on Gemma 3, available in 4B, 12B, and 27B parameter sizes, supporting 55 languages. GettextTranslator automatically detects TranslateGemma models by name and applies the required prompt format (single user message with professional translator persona, no system message).
+
+```elixir
+config :gettext_translator, GettextTranslator,
+  endpoint: LangChain.ChatModels.ChatGoogleAI,
+  endpoint_model: "translategemma-27b",
+  endpoint_temperature: 0,
+  endpoint_config: %{
+    "google_ai_key" => "YOUR_GOOGLE_AI_KEY"
+  },
+  source_language: "en",  # optional, defaults to "en"
+  ignored_languages: ["en"]
+```
+
+You can also use TranslateGemma via Ollama:
+
+```elixir
+config :gettext_translator, GettextTranslator,
+  endpoint: LangChain.ChatModels.ChatOllamaAI,
+  endpoint_model: "translategemma-12b",
+  endpoint_temperature: 0,
+  endpoint_config: %{},
+  source_language: "en",
+  ignored_languages: ["en"]
+```
+
+> **Note:** When using TranslateGemma, the `persona` and `style` config options are ignored — the model uses its own built-in prompt structure. The `source_language` option specifies the language of your `msgid` strings (defaults to `"en"`).
+
 ### Using a Custom Remote LLM
 
 GettextTranslator supports any LLM provider compatible with LangChain 0.4.0. The library dynamically configures LangChain at runtime using the `endpoint_config` map. Configuration keys are automatically converted to LangChain application environment variables.
@@ -210,7 +240,7 @@ GettextTranslator provides a full web UI for managing translations through Phoen
 ```elixir
 def deps do
   [
-    {:gettext_translator, "~> 0.6.0"},
+    {:gettext_translator, "~> 0.8.0"},
     {:phoenix_live_dashboard, ">= 0.6.0"},
     {:phoenix_live_view, ">= 0.17.0"}
   ]

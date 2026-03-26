@@ -4,7 +4,7 @@ defmodule GettextTranslator.MixProject do
   def project do
     [
       app: :gettext_translator,
-      version: "0.7.0",
+      version: "0.8.0",
       elixir: "~> 1.14",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
@@ -34,7 +34,8 @@ defmodule GettextTranslator.MixProject do
             GettextTranslator.Util.MakePullRequest,
             GettextTranslator.Util.PathHelper,
             GettextTranslator.Util.GitHub,
-            GettextTranslator.Util.GitLab
+            GettextTranslator.Util.GitLab,
+            GettextTranslator.Util.LanguageNames
           ],
           Dashboard: [
             GettextTranslator.Dashboard,
@@ -75,7 +76,7 @@ defmodule GettextTranslator.MixProject do
   defp deps do
     [
       {:expo, "~> 1.1.0"},
-      {:langchain, "~> 0.6.0"},
+      {:langchain, "~> 0.6.2"},
       # Dashboard dependencies (all optional)
       {:phoenix_live_dashboard, ">= 0.6.0", optional: true},
       {:phoenix_live_view, ">= 0.17.0", optional: true},

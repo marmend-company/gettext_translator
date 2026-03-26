@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.8.0] - 2026-03-26
+
+### Added
+
+- **TranslateGemma Support** — Automatic detection and prompt formatting for Google's TranslateGemma open translation models (4B, 12B, 27B). When the model name contains "translategemma" (case-insensitive), the library uses the model's required prompt structure: a single user message with professional translator persona, source/target language names and ISO codes, and two blank lines before the text to translate. No system message is sent.
+- **Source Language Configuration** — New `:source_language` config option to specify the language of `msgid` strings (defaults to `"en"`). Used by TranslateGemma to build accurate source-to-target translation prompts.
+- **Language Names Utility** — New `GettextTranslator.Util.LanguageNames` module mapping 90+ POSIX locale codes to full language names and ISO/BCP47 codes. Handles regional variants (e.g., `pt_BR` -> "Portuguese" / `pt-BR`, `zh_CN` -> "Chinese (Simplified)" / `zh-Hans`).
+
+### Changed
+
+- `GettextTranslator.Processor.LLM` now branches prompt construction based on model type: TranslateGemma models use the dedicated format, all other models use the existing system+user message format unchanged.
+- Provider type updated to include `source_language` field across parser, translator type, and dashboard resolver.
+
 ## [0.7.0] - 2026-02-28
 
 ### Breaking Changes

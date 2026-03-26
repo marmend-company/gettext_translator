@@ -6,6 +6,7 @@ defmodule GettextTranslator.Util.Parser do
 
   @default_style "Casual, use simple language"
   @default_persona "You are a proffesional translator. Your goal is to translate the message to the target language and try to keep the same meaning and length of the output sentence as original one."
+  @default_source_language "en"
 
   @doc """
   Returns a summary of the configured LLM provider for display in the dashboard.
@@ -40,6 +41,7 @@ defmodule GettextTranslator.Util.Parser do
       },
       persona: Keyword.get(config, :persona, @default_persona),
       style: Keyword.get(config, :style, @default_style),
+      source_language: Keyword.get(config, :source_language, @default_source_language),
       ignored_languages: Keyword.get(config, :ignored_languages, [])
     }
   end
