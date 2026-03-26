@@ -14,6 +14,7 @@ defmodule GettextTranslator.Processor.Translator do
           endpoint: endpoint(),
           persona: String.t(),
           style: String.t(),
+          source_language: String.t(),
           ignored_codes: list(String.t())
         }
 
