@@ -37,7 +37,11 @@ defmodule GettextTranslator.Util.Parser do
         adapter: Keyword.fetch!(config, :endpoint),
         model: Keyword.fetch!(config, :endpoint_model),
         temperature: Keyword.fetch!(config, :endpoint_temperature),
-        config: Keyword.fetch!(config, :endpoint_config)
+        config: Keyword.fetch!(config, :endpoint_config),
+        # Optional. Since LangChain 0.7.0, Req-level HTTP retries are disabled by
+        # default and transient 429/503 errors bubble up after `retry_count`
+        # attempts (LangChain default: 2). Set `:endpoint_retry_count` to tune it.
+        retry_count: Keyword.get(config, :endpoint_retry_count)
       },
       persona: Keyword.get(config, :persona, @default_persona),
       style: Keyword.get(config, :style, @default_style),
