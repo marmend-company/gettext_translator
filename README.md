@@ -79,7 +79,7 @@ Add `gettext_translator` to your dependencies in your `mix.exs`:
 ```elixir
 def deps do
   [
-    {:gettext_translator, "~> 0.8.0"}
+    {:gettext_translator, "~> 0.9.0"}
   ]
 end
 ```
@@ -182,9 +182,27 @@ config :gettext_translator, GettextTranslator,
 
 > **Note:** When using TranslateGemma, the `persona` and `style` config options are ignored — the model uses its own built-in prompt structure. The `source_language` option specifies the language of your `msgid` strings (defaults to `"en"`).
 
+### Tuning request retries (optional)
+
+Since LangChain 0.7.0, Req-level HTTP retries are disabled by default and transient
+errors (e.g. `429 Too Many Requests`, `503`) bubble up after LangChain's own
+`retry_count` attempts (default: `2`). If you translate against rate-limited or
+flaky endpoints, set `:endpoint_retry_count` to raise (or `0` to disable) retries:
+
+```elixir
+config :gettext_translator, GettextTranslator,
+  endpoint: LangChain.ChatModels.ChatOpenAI,
+  endpoint_model: "gpt-4",
+  endpoint_temperature: 0,
+  endpoint_config: %{"openai_key" => "YOUR_OPENAI_KEY"},
+  endpoint_retry_count: 5
+```
+
+When `:endpoint_retry_count` is omitted, the chat model's own default is used.
+
 ### Using a Custom Remote LLM
 
-GettextTranslator supports any LLM provider compatible with LangChain 0.4.0. The library dynamically configures LangChain at runtime using the `endpoint_config` map. Configuration keys are automatically converted to LangChain application environment variables.
+GettextTranslator supports any LLM provider compatible with LangChain (`>= 0.8.0`). The library dynamically configures LangChain at runtime using the `endpoint_config` map. Configuration keys are automatically converted to LangChain application environment variables.
 
 For example, to use a custom OpenAI-compatible endpoint:
 
@@ -240,7 +258,7 @@ GettextTranslator provides a full web UI for managing translations through Phoen
 ```elixir
 def deps do
   [
-    {:gettext_translator, "~> 0.8.0"},
+    {:gettext_translator, "~> 0.9.0"},
     {:phoenix_live_dashboard, ">= 0.6.0"},
     {:phoenix_live_view, ">= 0.17.0"}
   ]

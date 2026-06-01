@@ -91,11 +91,14 @@ defmodule GettextTranslator.Processor.LLM do
   end
 
   defp create_translation_chain(provider, code, message, additional_instructions) do
-    llm =
-      provider.endpoint.adapter.new!(%{
+    llm_attrs =
+      %{
         model: provider.endpoint.model,
         temperature: provider.endpoint.temperature
-      })
+      }
+      |> maybe_put(:retry_count, Map.get(provider.endpoint, :retry_count))
+
+    llm = provider.endpoint.adapter.new!(llm_attrs)
 
     messages =
       if translategemma?(provider.endpoint.model) do
@@ -180,6 +183,11 @@ defmodule GettextTranslator.Processor.LLM do
       "Produce only the #{target_name} translation, without any additional explanations or commentary. " <>
       "Please translate the following #{source_name} text into #{target_name}:\n\n\n#{message}"
   end
+
+  # Only inject the key when a value is provided, so we defer to the chat
+  # model's own default (e.g. LangChain's `retry_count`) when unset.
+  defp maybe_put(map, _key, nil), do: map
+  defp maybe_put(map, key, value), do: Map.put(map, key, value)
 
   # Safely convert LLM response content to string
   # Handles both LangChain 0.4.0 (list of ContentPart) and 0.3.3 (string) formats

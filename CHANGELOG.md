@@ -2,6 +2,31 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.0] - 2026-06-01
+
+### Changed
+
+- **LangChain requirement widened to `>= 0.8.0`** (was `~> 0.6.2`). The open upper
+  bound means GettextTranslator no longer pins a maximum LangChain version, so host
+  applications are free to upgrade LangChain (0.8.x, 0.9.x, …) without this library
+  blocking dependency resolution. Verified compiling and testing clean against
+  LangChain 0.8.11. The existing `ContentPart` / `LLMChain.run/2` handling already
+  covers the upstream content-structure and return-value changes introduced in 0.4.0.
+
+### Added
+
+- **Configurable request retries** — New optional `:endpoint_retry_count` config key,
+  forwarded to the chat model constructor. Since LangChain 0.7.0 disabled Req-level
+  HTTP retries by default and surfaces transient `429`/`503` errors after `retry_count`
+  attempts (upstream default: `2`), this lets you raise or disable retries for
+  rate-limited endpoints. When omitted, the chat model's own default is used.
+
+### Dependencies
+
+- Bumped tooling/optional dependencies to latest within existing requirements:
+  `credo` 1.7.16 → 1.7.18, `ex_doc` 0.40.1 → 0.40.3,
+  `phoenix_live_view` 1.1.22 → 1.1.31.
+
 ## [0.8.0] - 2026-03-26
 
 ### Added

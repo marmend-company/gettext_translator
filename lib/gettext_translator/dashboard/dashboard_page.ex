@@ -822,7 +822,8 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
         adapter: override.adapter,
         model: override.model,
         temperature: Keyword.get(config, :endpoint_temperature, 0.3),
-        config: override.config
+        config: override.config,
+        retry_count: Keyword.get(config, :endpoint_retry_count)
       },
       persona:
         Keyword.get(
