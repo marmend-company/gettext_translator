@@ -4,7 +4,6 @@ defmodule GettextTranslator.Store.Translation do
   Handles processing PO files and translation operations.
   """
   import GettextTranslator.Util.PoHelper
-  require Logger
   alias Expo.{Message, PO}
   alias GettextTranslator.Store
   alias GettextTranslator.Store.Changelog

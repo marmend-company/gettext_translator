@@ -26,7 +26,7 @@ Hack to fix it, run you `mix gettext.extract` one more time after translations a
   - Direct editing of translations with inline LLM translation assistance
   - Save changes back to PO files or create Git PRs directly
 - **Production Ready:** Works in both development and release environments with proper path handling.
-- **Pluralization Support:** Properly handles language-specific plural forms (including Ukrainian with three forms).
+- **Pluralization Support:** Properly handles language-specific plural forms for any number of forms — the `msgstr[n]` entries in your PO files (driven by `Plural-Forms`/`nplurals`) define which forms exist. Higher forms (`msgstr[2]`+) that are already translated in the file are preserved on save and only auto-filled while still empty.
 
 ## Dashboard Workflow
 
