@@ -220,16 +220,30 @@ defmodule GettextTranslator.Store.Changelog do
         })
       end)
 
-    # 4. Merge existing with modified translations, giving priority to modified ones
-    # This preserves entries that weren't modified in this session
-    merged_translations = Map.merge(existing_translations, modified_translations)
+    # 4. Merge existing with modified translations, giving priority to modified ones.
+    # This preserves entries that weren't modified in this session. When the text and
+    # status are unchanged, the existing entry (and its timestamp) is kept so reloading
+    # the dashboard doesn't rewrite every entry with a fresh `last_updated`.
+    merged_translations =
+      Map.merge(existing_translations, modified_translations, fn _key, existing, updated ->
+        if existing["text"] == updated["text"] and existing["status"] == updated["status"] do
+          existing
+        else
+          updated
+        end
+      end)
 
-    # 5. Prepare the final changelog structure
-    updated_content = %{
-      "language" => language_code,
-      "source_file" => file_path,
-      "translations" => merged_translations
-    }
+    # 5. Prepare the final changelog structure. Keys are sorted so the JSON
+    # output is deterministic and diffs only show real changes.
+    updated_content =
+      Jason.OrderedObject.new([
+        {"language", language_code},
+        {"source_file", file_path},
+        {"translations",
+         merged_translations
+         |> Enum.sort_by(fn {message_id, _} -> message_id end)
+         |> Jason.OrderedObject.new()}
+      ])
 
     # 6. Save to file
     case File.write(changelog_path, Jason.encode!(updated_content, pretty: true)) do

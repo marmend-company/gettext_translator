@@ -2,6 +2,51 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.1] - 2026-07-11
+
+### Fixed
+
+- **Higher plural forms are no longer corrupted on dashboard save.** Saving from
+  the LiveDashboard rewrites every already-translated entry, and for plural messages the
+  third-and-up forms (`msgstr[2]`+) were rebuilt from the store — which only tracks
+  `msgstr[0]` and `msgstr[1]` — so `msgstr[2]` was silently overwritten with a copy of
+  `msgstr[1]` (e.g. Ukrainian "кредитів" became "кредити"). `PoHelper.update_po_message/2`
+  now preserves any non-empty higher plural forms already present in the PO file and only
+  fills them with the generic plural translation when they are still empty. The hardcoded
+  `uk`/`ru`/`pl` language list is gone: the PO file's own `msgstr[n]` keys (from
+  `Plural-Forms`/`nplurals`) define which forms exist, so all languages — including
+  6-form ones like Arabic — are handled correctly. An explicit `:plural_translation_2`
+  on a translation entry still overrides `msgstr[2]` when provided.
+- **`mix gettext_translator.run` no longer drops higher plural forms.** The CLI processor
+  replaced the whole `msgstr` map with only forms 0 and 1 when translating pending plural
+  messages, deleting the `msgstr[2]` line entirely for three-form languages. It now reuses
+  the same form-preserving update logic as the dashboard.
+- **Changelog JSON files no longer churn in diffs.** Entries whose text and status are
+  unchanged keep their original `last_updated` timestamp (previously every pending entry
+  was rewritten with a fresh timestamp on each dashboard session), and the JSON output is
+  now deterministically sorted by message id — so `translation_changelog/*.json` diffs
+  only show real changes instead of hundreds of rewritten lines.
+
+### Changed
+
+- Removed the unreachable `[TRANSLATION_FAILED]` fallback in the CLI plural path
+  (`LLM.translate/2` already falls back to an empty translation on provider errors),
+  fixing an Elixir 1.20 type-inference warning. Cleaned up remaining unused
+  `require Logger` warnings.
+- `jason` is now a declared dependency (`~> 1.4`). It was already used at runtime for
+  changelog persistence but was only available transitively.
+
+### Dependencies
+
+- Verified compatibility with **LangChain 0.9.x** and bumped the lockfile to 0.9.2.
+  LangChain 0.9.0's breaking changes are confined to telemetry event names and custom
+  `ChatModel` implementations; the `LLMChain.run/2` / message-construction APIs used by
+  this library are unchanged.
+- Lockfile bumps with security fixes for transitive deps: `req` 0.5.18 → 0.6.2 and
+  `mint` 1.8.0 → 1.9.1 (HIGH CVEs), `plug` 1.19.2 → 1.20.3, `hpax` 1.0.3 → 1.0.4,
+  `phoenix` 1.8.7 → 1.8.9, `finch` 0.22.0 → 0.23.0, `phoenix_live_view`
+  1.1.31 → 1.2.6, `credo` 1.7.18 → 1.7.19.
+
 ## [0.9.0] - 2026-06-01
 
 ### Changed

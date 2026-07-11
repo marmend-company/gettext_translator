@@ -87,6 +87,45 @@ defmodule GettextTranslator.StoreTest do
       assert goodbye_translation.translation == "До побачення"
     end
 
+    test "saving one plural translation does not corrupt the third plural form" do
+      po_content = """
+      msgid ""
+      msgstr ""
+      "Language: uk\\n"
+      "Plural-Forms: nplurals=3\\n"
+
+      msgid "%{count} credit"
+      msgid_plural "%{count} credits"
+      msgstr[0] "%{count} кредит"
+      msgstr[1] "%{count} кредити"
+      msgstr[2] "%{count} кредитів"
+
+      msgid "Hello"
+      msgstr "Привіт"
+      """
+
+      File.write!(@test_po_path, po_content)
+
+      # Simulate "save to files" passing an untouched, already-translated
+      # plural entry (only msgstr[0] and msgstr[1] are tracked in the store)
+      translation = %{
+        message_id: "%{count} credit",
+        translation: "%{count} кредит",
+        plural_translation: "%{count} кредити",
+        language_code: "uk",
+        type: :plural
+      }
+
+      {:ok, _} = Translation.save_translations_to_file(@test_po_path, [translation])
+
+      {:ok, po} = Expo.PO.parse_file(@test_po_path)
+      plural = Enum.find(po.messages, &match?(%Expo.Message.Plural{}, &1))
+
+      assert plural.msgstr[0] == ["%{count} кредит"]
+      assert plural.msgstr[1] == ["%{count} кредити"]
+      assert plural.msgstr[2] == ["%{count} кредитів"]
+    end
+
     test "updates translations" do
       # Create a test PO file
       po_content = """

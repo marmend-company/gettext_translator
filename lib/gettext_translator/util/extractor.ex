@@ -6,8 +6,6 @@ defmodule GettextTranslator.Util.Extractor do
   In production (no Mix), falls back to merging .pot files into .po files using Expo.
   """
 
-  require Logger
-
   @doc """
   Extracts and merges gettext translations.
 

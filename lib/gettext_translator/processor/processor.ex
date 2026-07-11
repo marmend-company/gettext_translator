@@ -9,6 +9,7 @@ defmodule GettextTranslator.Processor do
   alias Expo.PO
   alias GettextTranslator.Processor.LLM
   alias GettextTranslator.Util.PathHelper
+  alias GettextTranslator.Util.PoHelper
 
   def run(%{language_code: code, files: files}, provider) do
     Logger.info("#{code}/#{lc_messages()} - starting processing")
@@ -120,57 +121,29 @@ defmodule GettextTranslator.Processor do
       "#{index}/#{count} - translating plural message `#{value_singular}` / `#{value_plural}` to `#{code}` "
     )
 
-    with {:ok, singular_text} <- translate_text(provider, value_singular, code),
-         {:ok, plural_text} <- translate_text(provider, value_plural, code) do
-      changelog_entry = %{
-        type: :plural,
-        original_singular: value_singular,
-        original_plural: value_plural,
-        translated_singular: singular_text,
-        translated_plural: plural_text,
-        code: code,
-        status: "NEW",
-        timestamp: DateTime.utc_now() |> DateTime.to_iso8601()
-      }
+    # `translate_text/3` never returns an error tuple (`LLM.translate/2`
+    # falls back to `{:ok, ""}`), so match directly like the singular clause.
+    {:ok, singular_text} = translate_text(provider, value_singular, code)
+    {:ok, plural_text} = translate_text(provider, value_plural, code)
 
-      {
-        %{
-          message
-          | msgstr: %{
-              0 => [singular_text],
-              1 => [plural_text]
-            }
-        },
-        changelog_entry
-      }
-    else
-      {:error, reason} ->
-        Logger.error("Failed to translate plural message: #{inspect(reason)}")
-        fallback_singular = "[TRANSLATION_FAILED]"
-        fallback_plural = "[TRANSLATION_FAILED]"
+    changelog_entry = %{
+      type: :plural,
+      original_singular: value_singular,
+      original_plural: value_plural,
+      translated_singular: singular_text,
+      translated_plural: plural_text,
+      code: code,
+      status: "NEW",
+      timestamp: DateTime.utc_now() |> DateTime.to_iso8601()
+    }
 
-        changelog_entry = %{
-          type: :plural,
-          original_singular: value_singular,
-          original_plural: value_plural,
-          translated_singular: fallback_singular,
-          translated_plural: fallback_plural,
-          code: code,
-          status: "ERROR",
-          timestamp: DateTime.utc_now() |> DateTime.to_iso8601()
-        }
+    updated_message =
+      PoHelper.update_po_message(message, %{
+        translation: singular_text,
+        plural_translation: plural_text
+      })
 
-        {
-          %{
-            message
-            | msgstr: %{
-                0 => [fallback_singular],
-                1 => [fallback_plural]
-              }
-          },
-          changelog_entry
-        }
-    end
+    {updated_message, changelog_entry}
   end
 
   defp translate_text(provider, text, code) do

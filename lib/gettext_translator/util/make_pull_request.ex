@@ -1,7 +1,6 @@
 defmodule GettextTranslator.Util.MakePullRequest do
   import GettextTranslator.Util.Helper
   import GettextTranslator.Util.PoHelper
-  require Logger
 
   alias GettextTranslator.Util.GitHub
   alias GettextTranslator.Util.GitLab

@@ -5,7 +5,6 @@ defmodule GettextTranslator.Store do
   """
 
   use GenServer
-  require Logger
 
   @table_name :gettext_translator_entries
   @changelog_table :gettext_translator_changelog
