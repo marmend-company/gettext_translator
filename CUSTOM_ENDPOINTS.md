@@ -711,9 +711,16 @@ end
 
 ## Examples
 
-### Example 1: OpenAI-Compatible Endpoint
+### Example 1: OpenAI-Compatible Endpoint (vLLM, LiteLLM, etc.)
 
-Many providers offer OpenAI-compatible APIs. You can use them with the built-in adapter:
+Many providers offer OpenAI-compatible APIs. You can use them with the built-in adapter.
+
+> **Since 0.10.0:** the configured base URL is threaded into `ChatOpenAI` via
+> `GettextTranslator.Processor.LLM.build_llm_attrs/1` (from the `"openai_endpoint"`
+> config key or the `"endpoint"` dashboard-override key). Earlier versions silently
+> ignored it and sent every request to `https://api.openai.com/v1/chat/completions`.
+> **vLLM** is also selectable directly from the LiveDashboard **Override LLM Provider**
+> form — pick "vLLM (OpenAI-compatible)" and enter the full `/v1/chat/completions` URL.
 
 ```elixir
 config :gettext_translator, GettextTranslator,
