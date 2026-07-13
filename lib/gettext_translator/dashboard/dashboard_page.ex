@@ -849,6 +849,12 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
   defp adapter_info("google_ai"),
     do: {LangChain.ChatModels.ChatGoogleAI, "google_ai_key", "Google AI"}
 
+  # vLLM speaks the OpenAI wire format, so it reuses ChatOpenAI + the openai_key
+  # config slot. The base URL supplied in the "Endpoint URL" field is threaded
+  # into the adapter via GettextTranslator.Processor.LLM.build_llm_attrs/1.
+  defp adapter_info("vllm"),
+    do: {LangChain.ChatModels.ChatOpenAI, "openai_key", "vLLM"}
+
   defp adapter_info(_),
     do: {LangChain.ChatModels.ChatOpenAI, "openai_key", "OpenAI"}
 

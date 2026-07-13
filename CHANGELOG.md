@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.0] - 2026-07-13
+
+### Added
+
+- **First-class vLLM provider.** The LiveDashboard **Override LLM Provider** form now
+  offers a **vLLM (OpenAI-compatible)** adapter alongside OpenAI, Anthropic, Ollama, and
+  Google AI. It maps to `LangChain.ChatModels.ChatOpenAI` (vLLM speaks the OpenAI wire
+  format) with the endpoint URL you supply, so a self-hosted gateway behind nginx + a
+  bearer token can be selected per session without editing config files. See the new
+  "Using vLLM" section in the README.
+
+### Fixed
+
+- **Custom OpenAI-compatible base URLs are now actually used.** `ChatOpenAI` reads its
+  base URL only from the struct passed to `new!/1` — it does not resolve one from
+  application env — but the translation chain never threaded the configured endpoint into
+  that struct. As a result, a configured `"openai_endpoint"` (or a dashboard-override
+  endpoint URL) was silently ignored and every request went to
+  `https://api.openai.com/v1/chat/completions`. The endpoint is now threaded into the
+  adapter via the new `GettextTranslator.Processor.LLM.build_llm_attrs/1`, honoring both
+  the `"openai_endpoint"` (documented config) and `"endpoint"` (dashboard override) keys.
+  This makes the documented custom-endpoint configuration — and the new vLLM option —
+  work as described.
+
 ## [0.9.1] - 2026-07-11
 
 ### Fixed

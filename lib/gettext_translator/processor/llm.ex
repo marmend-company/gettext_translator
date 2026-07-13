@@ -91,12 +91,7 @@ defmodule GettextTranslator.Processor.LLM do
   end
 
   defp create_translation_chain(provider, code, message, additional_instructions) do
-    llm_attrs =
-      %{
-        model: provider.endpoint.model,
-        temperature: provider.endpoint.temperature
-      }
-      |> maybe_put(:retry_count, Map.get(provider.endpoint, :retry_count))
+    llm_attrs = build_llm_attrs(provider.endpoint)
 
     llm = provider.endpoint.adapter.new!(llm_attrs)
 
@@ -115,6 +110,37 @@ defmodule GettextTranslator.Processor.LLM do
     |> LLMChain.add_messages(messages)
     |> LLMChain.run()
   end
+
+  @doc """
+  Builds the attribute map passed to the chat model's `new!/1`.
+
+  Besides `model`, `temperature` and (optionally) `retry_count`, this threads a
+  custom base URL into `:endpoint` when one is present in `endpoint.config`.
+
+  This matters for OpenAI-compatible gateways such as **vLLM**: `ChatOpenAI`
+  only reads its base URL from the struct field passed to `new!/1` — it does NOT
+  resolve one from application env — so without this, selecting a custom endpoint
+  (in config or via the dashboard override) silently fell back to
+  `https://api.openai.com/v1/chat/completions`. The endpoint is read from the
+  `"endpoint"` key (dashboard override / generic) or `"openai_endpoint"` key
+  (documented OpenAI-compatible config), accepting both string and atom keys.
+  """
+  @spec build_llm_attrs(map()) :: map()
+  def build_llm_attrs(endpoint) do
+    %{
+      model: endpoint.model,
+      temperature: endpoint.temperature
+    }
+    |> maybe_put(:retry_count, Map.get(endpoint, :retry_count))
+    |> maybe_put(:endpoint, endpoint_override(Map.get(endpoint, :config)))
+  end
+
+  defp endpoint_override(config) when is_map(config) do
+    Map.get(config, "endpoint") || Map.get(config, :endpoint) ||
+      Map.get(config, "openai_endpoint") || Map.get(config, :openai_endpoint)
+  end
+
+  defp endpoint_override(_), do: nil
 
   @doc """
   Checks if the given model name is a TranslateGemma model.

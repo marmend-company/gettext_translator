@@ -12,7 +12,7 @@ Hack to fix it, run you `mix gettext.extract` one more time after translations a
 
 ## Features
 
-- **Multi-Provider Support:** Easily switch between translation endpoints such as Ollama AI and OpenAI.
+- **Multi-Provider Support:** Easily switch between translation endpoints such as Ollama AI, OpenAI, Anthropic, Google AI, and any OpenAI-compatible gateway (e.g. vLLM).
 - **Customizable Configurations:** Define your own translation persona, style, and languages to ignore.
 - **CLI Integration:** Translate Gettext files directly from the command line.
 - **Seamless Gettext Integration:** Automatically translate files in your Gettext directory.
@@ -40,7 +40,7 @@ After loading translations, the **Translation Stats** tab shows a summary of all
 
 ### Step 2: Override LLM Provider (Optional)
 
-Click **Override LLM Provider** to switch the AI provider for the current session without changing your config files. Select an adapter (OpenAI, Anthropic, Ollama, Google AI), enter the model name, API key, and optionally a custom endpoint URL.
+Click **Override LLM Provider** to switch the AI provider for the current session without changing your config files. Select an adapter (OpenAI, Anthropic, Ollama, Google AI, or **vLLM**), enter the model name, API key, and optionally a custom endpoint URL. For **vLLM** (or any OpenAI-compatible gateway) the endpoint URL is required — enter the full `/v1/chat/completions` URL — and the API key is your gateway's bearer token.
 
 ![LLM Override form](examples/image-3.png)
 
@@ -220,6 +220,33 @@ config :gettext_translator, GettextTranslator,
   style: "Casual, using simple language",
   ignored_languages: ["en"]
 ```
+
+### Using vLLM (or any OpenAI-compatible gateway)
+
+[vLLM](https://docs.vllm.ai/) exposes the OpenAI `/v1/chat/completions` API, so it
+reuses the `ChatOpenAI` adapter — you only need to point it at your gateway. The
+base URL is passed straight through to the adapter, so a self-hosted model behind
+nginx + a bearer token works out of the box:
+
+```elixir
+config :gettext_translator, GettextTranslator,
+  endpoint: LangChain.ChatModels.ChatOpenAI,
+  endpoint_model: "gemma-4-26b-a4b-it",
+  endpoint_temperature: 0,
+  endpoint_config: %{
+    "openai_key" => System.get_env("VLLM_API_KEY"),
+    "openai_endpoint" => "https://llm.example.com/v1/chat/completions"
+  },
+  persona: "You are a professional translator. Your goal is to translate the message to the target language while preserving meaning and length.",
+  style: "Casual, using simple language",
+  ignored_languages: ["en"]
+```
+
+You can also select **vLLM** from the LiveDashboard **Override LLM Provider** form
+(Step 2 above) to translate against a gateway for a single session without editing
+config. Either the `"openai_endpoint"` or `"endpoint"` config key is honored, and
+the base URL is threaded into the adapter (previously custom base URLs were
+silently ignored and requests fell back to `api.openai.com`).
 
 **Note:** As of LangChain 0.4.0, the following models are officially supported:
 - OpenAI ChatGPT
