@@ -51,6 +51,7 @@ defmodule GettextTranslator.Dashboard.Components.LLMOverrideForm do
                 <option value="anthropic">Anthropic</option>
                 <option value="ollama">Ollama</option>
                 <option value="google_ai">Google AI</option>
+                <option value="vllm">vLLM (OpenAI-compatible)</option>
               </select>
             </div>
 
@@ -78,12 +79,12 @@ defmodule GettextTranslator.Dashboard.Components.LLMOverrideForm do
             </div>
 
             <div class="form-group" style="flex: 1;">
-              <label class="form-label">Endpoint URL (optional)</label>
+              <label class="form-label">Endpoint URL (required for vLLM)</label>
               <input
                 type="text"
                 name="endpoint_url"
                 class="form-control"
-                placeholder="e.g. http://localhost:11434 for Ollama"
+                placeholder="e.g. https://llm.example.com/v1/chat/completions for vLLM"
               />
             </div>
           </div>
