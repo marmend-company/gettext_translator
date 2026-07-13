@@ -715,7 +715,7 @@ end
 
 Many providers offer OpenAI-compatible APIs. You can use them with the built-in adapter.
 
-> **Since 0.10.0:** the configured base URL is threaded into `ChatOpenAI` via
+> **Since 0.9.2:** the configured base URL is threaded into `ChatOpenAI` via
 > `GettextTranslator.Processor.LLM.build_llm_attrs/1` (from the `"openai_endpoint"`
 > config key or the `"endpoint"` dashboard-override key). Earlier versions silently
 > ignored it and sent every request to `https://api.openai.com/v1/chat/completions`.
