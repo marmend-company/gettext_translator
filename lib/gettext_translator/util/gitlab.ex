@@ -9,7 +9,9 @@ defmodule GettextTranslator.Util.GitLab do
 
     # Get GitLab token
     config = Application.get_env(:gettext_translator, :git_config, %{})
-    token = Map.get(config, :gitlab_token, "")
+    # See the note in GettextTranslator.Util.GitHub: `Map.get/3`'s default does
+    # not cover a present-but-nil value, which is what an unset env var produces.
+    token = Map.get(config, :gitlab_token) || ""
 
     if token == "" do
       {:error, "GitLab token not configured"}

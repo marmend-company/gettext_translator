@@ -42,6 +42,8 @@ After loading translations, the **Translation Stats** tab shows a summary of all
 
 Click **Override LLM Provider** to switch the AI provider for the current session without changing your config files. Select an adapter (OpenAI, Anthropic, Ollama, Google AI, or **vLLM**), enter the model name, API key, and optionally a custom endpoint URL. For **vLLM** (or any OpenAI-compatible gateway) the endpoint URL is required — enter the full `/v1/chat/completions` URL — and the API key is your gateway's bearer token.
 
+If your instance already configures a provider, set [`:default_provider`](#making-your-gateway-the-forms-default) and this form opens preselected on it with the model filled in and both credential fields optional — no endpoint or key to retype.
+
 ![LLM Override form](examples/image-3.png)
 
 ### Step 3: Extract & Merge New Translations
@@ -247,6 +249,42 @@ You can also select **vLLM** from the LiveDashboard **Override LLM Provider** fo
 config. Either the `"openai_endpoint"` or `"endpoint"` config key is honored, and
 the base URL is threaded into the adapter (previously custom base URLs were
 silently ignored and requests fell back to `api.openai.com`).
+
+#### Making your gateway the form's default
+
+If an instance already has a gateway configured, retyping its endpoint and API key
+into the override form every session is busywork. Name the provider your config is
+for and the form opens ready to submit:
+
+```elixir
+config :gettext_translator, GettextTranslator,
+  endpoint: MyApp.LLM.ChatVLLM,
+  endpoint_model: System.get_env("GETTEXT_TRANSLATOR_MODEL", "gemma-4-26b-a4b-it"),
+  endpoint_config: %{"openai_key" => System.get_env("VLLM_API_KEY")},
+  default_provider: :vllm
+```
+
+With `:default_provider` set, the override form:
+
+- opens with that adapter selected and `:endpoint_model` already filled in;
+- labels API Key and Endpoint URL **optional**, treating a blank field as "use
+  what the instance is configured with" — so submitting the form unchanged just
+  uses your gateway;
+- routes the override through your **own** `:endpoint` module instead of the
+  generic `ChatOpenAI`. That matters for a self-hosted gateway: a module such as
+  `MyApp.LLM.ChatVLLM` resolves its endpoint and bearer token from the release
+  environment, whereas `ChatOpenAI` needs the full completions URL typed in.
+
+Anything you do type still wins, and choosing a different provider from the list
+behaves exactly as before — those fields exist to be filled in for cloud providers
+that need a key, and a provider that is *not* the configured one never inherits its
+credentials. Leave `:default_provider` unset to keep the old behavior.
+
+`:default_provider` must name one of `:openai`, `:anthropic`, `:ollama`,
+`:google_ai`, `:vllm` (`GettextTranslator.Util.Parser.known_providers/0`). Anything
+else is refused with a logged warning and the form falls back to its blank state —
+an unrecognized slug would otherwise match no `<option>`, leaving the browser to
+select the first one (OpenAI) while the model stayed prefilled from your config.
 
 **Note:** As of LangChain 0.4.0, the following models are officially supported:
 - OpenAI ChatGPT

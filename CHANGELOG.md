@@ -2,6 +2,93 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.3] - 2026-08-17
+
+Self-hosted **vLLM** — and any OpenAI-compatible gateway — is now supported end to
+end. The provider can be **configured inline** in your application config, and that
+same provider can still be **overridden per session** from the dashboard. Since
+0.9.2 the LiveDashboard **Override LLM Provider** form offers a vLLM adapter you can
+point at a gateway by hand; this release closes the loop, so an instance that already
+has a gateway in its config no longer has to retype it: the form opens on the
+configured provider, and anything you do type overrides it.
+
+### Added
+
+- **`:default_provider` — configure the provider inline, override it when you want.**
+  An instance whose endpoint and API key already come from its own environment
+  should not make an operator retype them into a dashboard form. Naming the
+  provider your config is for:
+
+  ```elixir
+  config :gettext_translator, GettextTranslator,
+    endpoint: MyApp.LLM.ChatVLLM,
+    endpoint_model: System.get_env("GETTEXT_TRANSLATOR_MODEL", "gemma-4-26b-a4b-it"),
+    default_provider: :vllm
+  ```
+
+  opens the **Override LLM Provider** form with that adapter selected and
+  `:endpoint_model` filled in, marks API Key and Endpoint URL optional, and treats
+  a blank field as "use what the instance is configured with". Submitting the form
+  unchanged translates against your gateway.
+
+  Crucially, the override then routes through your **own** `:endpoint` module
+  rather than the generic `LangChain.ChatModels.ChatOpenAI`. For a self-hosted
+  gateway that is the difference between working and not: a module like
+  `MyApp.LLM.ChatVLLM` resolves its endpoint and bearer token itself, whereas
+  `ChatOpenAI` requires the full `/v1/chat/completions` URL to be supplied by hand.
+
+  Anything typed into the form still wins, selecting a different provider behaves
+  exactly as before — and never inherits the configured provider's credentials —
+  and leaving `:default_provider` unset preserves the previous behavior exactly:
+  nothing at all is inherited unless the option opts in.
+
+  The value is validated against `Parser.known_providers/0`; an unrecognized slug
+  is refused with a logged warning rather than accepted, because it would match no
+  `<option>` and leave the browser selecting OpenAI while the model stayed
+  prefilled from config.
+
+  Exposed as `GettextTranslator.Util.Parser.instance_default/0`,
+  `provider_label/1`, `known_providers/0` and `resolve_override/2` — the override
+  form's provider/credential resolution moved out of the LiveDashboard page into
+  `Parser`, where it is config resolution rather than view logic and is directly
+  unit-tested.
+
+### Changed
+
+- **Dependencies:** `langchain` 0.9.2 → **0.10.0**, `phoenix_live_dashboard` 0.8.7 →
+  **0.9.0**, `phoenix_live_view` 1.2.6 → **1.2.9**, plus transitive `phoenix` 1.8.11,
+  `req` 0.7.2, `ecto` 3.14.2, `mint` 1.9.3 and `plug_crypto` 2.2.0.
+
+  The requirements in `mix.exs` are **unchanged** and stay deliberately open —
+  `langchain >= 0.8.0`, `phoenix_live_dashboard >= 0.6.0`,
+  `phoenix_live_view >= 0.17.0` — so host applications remain free to resolve their
+  own versions. Only `mix.lock` moved.
+
+  LangChain 0.10.0's breaking changes are confined to `Message.status` — stream
+  failures now report `:stream_error` rather than `:cancelled`, and a provider
+  content filter (or an Anthropic `"refusal"` stop reason) now reports
+  `:content_filtered` rather than `:complete`. None of them reach this library:
+  it never enables streaming, registers no callbacks, and never matches on
+  `Message.status` — only on `{:ok, %{last_message: %Message{content: content}}}`
+  and `{:error, _, reason}`.
+
+  The call surface is otherwise untouched. `LLMChain.new!/1`, `add_messages/2`
+  and `run/1`, `Message.new_system!/1` and `new_user!/1`,
+  `ContentPart.parts_to_string/1`, and the `ChatOpenAI`, `ChatAnthropic`,
+  `ChatOllamaAI` and `ChatGoogleAI` adapters all keep their signatures — no
+  public function was added or removed in any module this library calls, and
+  `run/1` still returns `{:ok, chain}` / `{:error, chain, error}`.
+
+### Fixed
+
+- **An unset token env var now reports "token not configured" instead of failing
+  obscurely.** Both the GitHub and GitLab pull-request clients read their token
+  with `Map.get(config, :key, "")`, whose default only applies to a *missing* key.
+  The usual config shape — `github_token: System.get_env("GITHUB_TOKEN")` with the
+  variable unset — produces a key that is present and `nil`, which slipped past the
+  `token == ""` guard and was sent as a nil HTTP header value, failing deep inside
+  the client. Both clients now coalesce nil to `""` and return the intended error.
+
 ## [0.9.2] - 2026-07-13
 
 ### Added

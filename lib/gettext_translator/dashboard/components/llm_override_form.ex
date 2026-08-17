@@ -4,9 +4,19 @@ defmodule GettextTranslator.Dashboard.Components.LLMOverrideForm do
   """
   use Phoenix.Component
 
+  alias GettextTranslator.Util.Parser
+
   attr(:llm_override, :map, default: nil)
   attr(:llm_provider_info, :map, required: true)
   attr(:show_override_form, :boolean, default: false)
+
+  # Instance configuration, from `GettextTranslator.Util.Parser.instance_default/0`.
+  # When `:provider` is set the form opens on that adapter with its model filled
+  # in, so the common case — "translate with the gateway this release is already
+  # wired to" — is a single click instead of four fields.
+  attr(:llm_defaults, :map,
+    default: %{provider: nil, model: nil, adapter: nil, endpoint_config: %{}}
+  )
 
   def render(assigns) do
     ~H"""
@@ -47,11 +57,21 @@ defmodule GettextTranslator.Dashboard.Components.LLMOverrideForm do
             <div class="form-group" style="flex: 1;">
               <label class="form-label">Adapter</label>
               <select name="adapter" class="form-control form-select">
-                <option value="openai">OpenAI</option>
-                <option value="anthropic">Anthropic</option>
-                <option value="ollama">Ollama</option>
-                <option value="google_ai">Google AI</option>
-                <option value="vllm">vLLM (OpenAI-compatible)</option>
+                <option value="openai" selected={@llm_defaults.provider == "openai"}>
+                  OpenAI
+                </option>
+                <option value="anthropic" selected={@llm_defaults.provider == "anthropic"}>
+                  Anthropic
+                </option>
+                <option value="ollama" selected={@llm_defaults.provider == "ollama"}>
+                  Ollama
+                </option>
+                <option value="google_ai" selected={@llm_defaults.provider == "google_ai"}>
+                  Google AI
+                </option>
+                <option value="vllm" selected={@llm_defaults.provider == "vllm"}>
+                  vLLM (OpenAI-compatible){if @llm_defaults.provider == "vllm", do: " — configured"}
+                </option>
               </select>
             </div>
 
@@ -61,6 +81,7 @@ defmodule GettextTranslator.Dashboard.Components.LLMOverrideForm do
                 type="text"
                 name="model"
                 class="form-control"
+                value={@llm_defaults.model}
                 placeholder="e.g. gpt-4, claude-sonnet-4-5-20250929, llama3"
                 required
               />
@@ -69,22 +90,22 @@ defmodule GettextTranslator.Dashboard.Components.LLMOverrideForm do
 
           <div class="form-row">
             <div class="form-group" style="flex: 1;">
-              <label class="form-label">API Key (optional for Ollama)</label>
+              <label class="form-label">API Key {credential_hint(@llm_defaults)}</label>
               <input
                 type="password"
                 name="api_key"
                 class="form-control"
-                placeholder="sk-... or your provider API key"
+                placeholder={credential_placeholder(@llm_defaults)}
               />
             </div>
 
             <div class="form-group" style="flex: 1;">
-              <label class="form-label">Endpoint URL (required for vLLM)</label>
+              <label class="form-label">Endpoint URL {credential_hint(@llm_defaults)}</label>
               <input
                 type="text"
                 name="endpoint_url"
                 class="form-control"
-                placeholder="e.g. https://llm.example.com/v1/chat/completions for vLLM"
+                placeholder={endpoint_placeholder(@llm_defaults)}
               />
             </div>
           </div>
@@ -99,4 +120,34 @@ defmodule GettextTranslator.Dashboard.Components.LLMOverrideForm do
     </div>
     """
   end
+
+  # These name the provider that inheritance applies to rather than saying a bare
+  # "optional", because the form is `phx-change="noop"`: switching the Adapter
+  # dropdown does not re-render, so any copy phrased about "the current selection"
+  # would keep asserting itself after the operator picked something else. Only the
+  # configured provider inherits — see Parser.resolve_override/2 — and an
+  # unqualified "optional" left beside a freshly-selected Anthropic would talk an
+  # operator out of pasting the key that request genuinely needs.
+  #
+  # Ollama is already named in the base hint, and it has no API-key slot at all,
+  # so an instance defaulting to it must not read "optional for Ollama and Ollama".
+  defp credential_hint(%{provider: nil}), do: "(optional for Ollama)"
+  defp credential_hint(%{provider: "ollama"}), do: "(optional for Ollama)"
+
+  defp credential_hint(%{provider: provider}),
+    do: "(optional for Ollama and #{label(provider)})"
+
+  defp credential_placeholder(%{provider: nil}), do: "sk-... or your provider API key"
+
+  defp credential_placeholder(%{provider: provider}),
+    do: "sk-... — blank uses the configured key (#{label(provider)} only)"
+
+  defp endpoint_placeholder(%{provider: nil}),
+    do: "e.g. https://llm.example.com/v1/chat/completions for vLLM"
+
+  defp endpoint_placeholder(%{provider: provider}),
+    do: "blank uses the configured endpoint (#{label(provider)} only)"
+
+  # "google_ai" is not what anyone wants to read in a form label.
+  defp label(provider), do: Parser.provider_label(provider) || provider
 end

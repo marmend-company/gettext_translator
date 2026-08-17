@@ -72,6 +72,7 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
        llm_translating: false,
        llm_translation_result: nil,
        llm_provider_info: Parser.provider_info(),
+       llm_defaults: Parser.instance_default(),
        active_tab: "stats",
        extracting: false,
        batch_translating: false,
@@ -139,6 +140,7 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
           <LLMOverrideForm.render
             llm_override={@llm_override}
             llm_provider_info={@llm_provider_info}
+            llm_defaults={@llm_defaults}
             show_override_form={@show_override_form}
           />
 
@@ -605,24 +607,8 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
 
   @impl true
   def handle_event("update_llm_override", params, socket) do
-    adapter_name = Map.get(params, "adapter", "openai")
-    model = Map.get(params, "model", "")
-    api_key = Map.get(params, "api_key", "")
-    endpoint_url = Map.get(params, "endpoint_url", "")
-
-    {adapter_module, config_key, display_name} = adapter_info(adapter_name)
-
-    endpoint_config =
-      %{}
-      |> maybe_put_config(config_key, api_key)
-      |> maybe_put_endpoint_url(adapter_name, endpoint_url)
-
-    override = %{
-      adapter: adapter_module,
-      adapter_name: display_name,
-      model: model,
-      config: endpoint_config
-    }
+    override = Parser.resolve_override(params, socket.assigns.llm_defaults)
+    %{adapter_name: display_name, model: model} = override
 
     provider_info = %{configured: true, adapter_name: display_name, model: model}
 
@@ -836,35 +822,6 @@ defmodule GettextTranslator.Dashboard.DashboardPage do
       ignored_languages: Keyword.get(config, :ignored_languages, [])
     }
   end
-
-  defp adapter_info("openai"),
-    do: {LangChain.ChatModels.ChatOpenAI, "openai_key", "OpenAI"}
-
-  defp adapter_info("anthropic"),
-    do: {LangChain.ChatModels.ChatAnthropic, "anthropic_key", "Anthropic"}
-
-  defp adapter_info("ollama"),
-    do: {LangChain.ChatModels.ChatOllamaAI, nil, "Ollama"}
-
-  defp adapter_info("google_ai"),
-    do: {LangChain.ChatModels.ChatGoogleAI, "google_ai_key", "Google AI"}
-
-  # vLLM speaks the OpenAI wire format, so it reuses ChatOpenAI + the openai_key
-  # config slot. The base URL supplied in the "Endpoint URL" field is threaded
-  # into the adapter via GettextTranslator.Processor.LLM.build_llm_attrs/1.
-  defp adapter_info("vllm"),
-    do: {LangChain.ChatModels.ChatOpenAI, "openai_key", "vLLM"}
-
-  defp adapter_info(_),
-    do: {LangChain.ChatModels.ChatOpenAI, "openai_key", "OpenAI"}
-
-  defp maybe_put_config(config, nil, _api_key), do: config
-  defp maybe_put_config(config, _key, ""), do: config
-  defp maybe_put_config(config, key, api_key), do: Map.put(config, key, api_key)
-
-  defp maybe_put_endpoint_url(config, _adapter, ""), do: config
-  defp maybe_put_endpoint_url(config, "ollama", url), do: Map.put(config, "endpoint", url)
-  defp maybe_put_endpoint_url(config, _adapter, url), do: Map.put(config, "endpoint", url)
 
   defp resolve_gettext_path(session \\ %{}) do
     # Try session first (from init), then persistent_term as fallback
