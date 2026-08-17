@@ -2,6 +2,59 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.3] - 2026-08-17
+
+### Added
+
+- **`:default_provider` — make your configured gateway the override form's default.**
+  An instance whose endpoint and API key already come from its own environment
+  should not make an operator retype them into a dashboard form. Naming the
+  provider your config is for:
+
+  ```elixir
+  config :gettext_translator, GettextTranslator,
+    endpoint: MyApp.LLM.ChatVLLM,
+    endpoint_model: System.get_env("GETTEXT_TRANSLATOR_MODEL", "gemma-4-26b-a4b-it"),
+    default_provider: :vllm
+  ```
+
+  opens the **Override LLM Provider** form with that adapter selected and
+  `:endpoint_model` filled in, marks API Key and Endpoint URL optional, and treats
+  a blank field as "use what the instance is configured with". Submitting the form
+  unchanged translates against your gateway.
+
+  Crucially, the override then routes through your **own** `:endpoint` module
+  rather than the generic `LangChain.ChatModels.ChatOpenAI`. For a self-hosted
+  gateway that is the difference between working and not: a module like
+  `MyApp.LLM.ChatVLLM` resolves its endpoint and bearer token itself, whereas
+  `ChatOpenAI` requires the full `/v1/chat/completions` URL to be supplied by hand.
+
+  Anything typed into the form still wins, selecting a different provider behaves
+  exactly as before — and never inherits the configured provider's credentials —
+  and leaving `:default_provider` unset preserves the previous behavior exactly:
+  nothing at all is inherited unless the option opts in.
+
+  The value is validated against `Parser.known_providers/0`; an unrecognized slug
+  is refused with a logged warning rather than accepted, because it would match no
+  `<option>` and leave the browser selecting OpenAI while the model stayed
+  prefilled from config.
+
+  Exposed as `GettextTranslator.Util.Parser.instance_default/0`,
+  `provider_label/1`, `known_providers/0` and `resolve_override/2` — the override
+  form's provider/credential resolution moved out of the LiveDashboard page into
+  `Parser`, where it is config resolution rather than view logic and is directly
+  unit-tested.
+
+### Fixed
+
+- **An unset token env var now reports "token not configured" instead of failing
+  obscurely.** Both the GitHub and GitLab pull-request clients read their token
+  with `Map.get(config, :key, "")`, whose default only applies to a *missing* key.
+  The usual config shape — `github_token: System.get_env("GITHUB_TOKEN")` with the
+  variable unset — produces a key that is present and `nil`, which slipped past the
+  `token == ""` guard and was sent as a nil HTTP header value, failing deep inside
+  the client. Both clients now coalesce nil to `""` and return the intended error.
+
 ## [0.9.2] - 2026-07-13
 
 ### Added

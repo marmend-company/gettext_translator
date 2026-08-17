@@ -9,7 +9,11 @@ defmodule GettextTranslator.Util.GitHub do
 
     # Get GitHub token
     config = Application.get_env(:gettext_translator, :git_config, %{})
-    token = Map.get(config, :github_token, "")
+    # `Map.get/3`'s default only covers a *missing* key. A present-but-nil value
+    # is the common case — `github_token: System.get_env("...")` with the
+    # variable unset — and letting nil through means a nil HTTP header value and
+    # an obscure failure deep in the client instead of this message.
+    token = Map.get(config, :github_token) || ""
 
     if token == "" do
       {:error, "GitHub token not configured"}
